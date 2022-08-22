@@ -19,6 +19,7 @@ namespace Google.Protobuf.Reflection.Dynamic
 
         public MessageDescriptor Descriptor => type;
 
+
         /// <summary>
         /// Constructs a builder for a message of the same type as <paramref name="prototype"/>,
         /// and initializes it with the same contents.

@@ -1,5 +1,4 @@
-﻿using Google.Protobuf.WellKnownTypes;
-using System;
+﻿using System;
 using System.Collections;
 using System.Collections.Generic;
 using Type = Google.Protobuf.WellKnownTypes.Type;
@@ -219,7 +218,21 @@ namespace Google.Protobuf.Reflection.Dynamic
 
         private int computeSize(FieldDescriptor desc, object value)
         {
-            return computeElementSize(desc.FieldType, desc.FieldNumber, value);
+            if (desc.IsRepeated)
+            {
+                int dataSize = 0;
+                int tagSize = CodedOutputStream.ComputeTagSize(desc.FieldNumber);
+                foreach (object val in (IEnumerable) value)
+                {
+                    dataSize += ComputeElementSizeNoTag(desc.FieldType, val) + tagSize;
+                }
+                return dataSize;
+            }
+            else
+            {
+                return computeElementSize(desc.FieldType, desc.FieldNumber, value);
+            }
+
         }
 
         private int computeElementSize(FieldType fieldType, int fieldNumber, object value)
@@ -233,10 +246,21 @@ namespace Google.Protobuf.Reflection.Dynamic
             switch (fieldType)
             {
                 case FieldType.String:
-                    return CodedOutputStream.ComputeStringSize(((Value) value).StringValue);
+                    return CodedOutputStream.ComputeStringSize(value.ToString());
+                case FieldType.Bool:
+                    return CodedOutputStream.ComputeBoolSize(Boolean.Parse(value.ToString()));
+                case FieldType.Int32:
+                    return CodedOutputStream.ComputeInt32Size(Int32.Parse(value.ToString()));
+                case FieldType.Double:
+                    return CodedOutputStream.ComputeDoubleSize(Double.Parse(value.ToString()));
+                case FieldType.Message:
+                    return CodedOutputStream.ComputeMessageSize((IMessage) value);
+                    //return ((DynamicMessage) value).CalculateSize();
+
             }
             throw new ArgumentException("unidentified type :" + fieldType.ToString());
         }
+
 
         public void WriteTo(CodedOutputStream output)
         {
@@ -249,24 +273,65 @@ namespace Google.Protobuf.Reflection.Dynamic
         private void WriteField(FieldDescriptor key, object value, CodedOutputStream output)
         {
             FieldType fieldType = key.FieldType;
-            WriteElement(output, WireFormat.WireType.LengthDelimited, key.FieldNumber, value);
+            if (key.IsRepeated)
+            {
 
+                foreach (Object val in (IEnumerable) value)
+                {
+                    output.WriteTag(key.FieldNumber, WireFormat.WireType.LengthDelimited);
+                    WriteElementNoTag(output, fieldType, val);
+                }
+            }
+            else
+            {
+                WriteElement(output, fieldType, key.FieldNumber, value);
+            }
         }
 
-        private void WriteElement(CodedOutputStream output, WireFormat.WireType type, int number, object value)
+        private void WriteElement(CodedOutputStream output, FieldType type, int number, object value)
         {
-            output.WriteTag(number, WireFormat.WireType.LengthDelimited);
+            output.WriteTag(number, GetWireFormatForFieldType(type));
             WriteElementNoTag(output, type, value);
         }
 
-        private void WriteElementNoTag(CodedOutputStream output, WireFormat.WireType type, object value)
+        private WireFormat.WireType GetWireFormatForFieldType(FieldType type)
         {
             switch (type)
             {
-                case WireFormat.WireType.LengthDelimited:
-                    output.WriteString(((Value) value).StringValue);
-                    return;
+                case FieldType.Double:
+                    return WireFormat.WireType.Fixed64;
+                case FieldType.Bool:
+                    return WireFormat.WireType.Varint;
+                case FieldType.Int32:
+                    return WireFormat.WireType.Varint;
+                case FieldType.String:
+                    return WireFormat.WireType.LengthDelimited;
+                case FieldType.Message:
+                    return WireFormat.WireType.LengthDelimited;
+            }
+            throw new ArgumentException("unidentified type :" + type.ToString());
+        }
 
+        private void WriteElementNoTag(CodedOutputStream output, FieldType type, object value)
+        {
+            switch (type)
+            {
+                case FieldType.String:
+                    output.WriteString(value.ToString());
+                    return;
+                case FieldType.Bool:
+                    output.WriteBool(Boolean.Parse(value.ToString()));
+                    return;
+                case FieldType.Int32:
+                    output.WriteInt32((int) value);
+                    return;
+                case FieldType.Double:
+                    output.WriteDouble((double) value);
+                    return;
+                case FieldType.Message:
+                    output.WriteMessage((IMessage) value);
+                    //((DynamicMessage) value).WriteTo(output);
+                    return;
             }
             throw new ArgumentException("unidentified type :" + type.ToString());
         }
