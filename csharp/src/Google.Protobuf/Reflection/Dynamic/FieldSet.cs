@@ -12,7 +12,7 @@ namespace Google.Protobuf.Reflection.Dynamic
         bool IsRequired { get; }
         bool IsPacked { get; }
         bool IsExtension { get; }
-        bool MessageSetWireFormat { get; } //field.ContainingType.Options.MessageSetWireFormat
+        bool MessageSetWireFormat { get; }
         int FieldNumber { get; }
         string Name { get; }
         string FullName { get; }
@@ -30,7 +30,6 @@ namespace Google.Protobuf.Reflection.Dynamic
 
         public static FieldSet CreateInstance()
         {
-            //SortedList<IFieldDescriptorLite, object> sl = new SortedList<IFieldDescriptorLite, object>();
             // Use SortedList to keep fields in the canonical order
             return new FieldSet(new SortedList<FieldDescriptor, object>());
         }
@@ -40,44 +39,7 @@ namespace Google.Protobuf.Reflection.Dynamic
             this.fields = fields;
         }
 
-        /* public void MergeFrom(MessageDescriptor other)
-         {
-             foreach (KeyValuePair<string, FieldDescriptor> fd in other.Fields.ByJsonName())
-             {
-                 MergeField(fd.Key, fd.Value);
-             }
-         }
 
-         private void MergeField(object mergeValue, FieldDescriptor field)
-         {
-             object existingValue;
-             fields.TryGetValue(field, out existingValue);
-             if (field.IsRepeated)
-             {
-                 if (existingValue == null)
-                 {
-                     existingValue = new List<object>();
-                     fields[field] = existingValue;
-                 }
-                 IList<object> list = (IList<object>) existingValue;
-                 foreach (object otherValue in (IEnumerable) mergeValue)
-                 {
-                     list.Add(otherValue);
-                 }
-             }
-             else if (field.FieldType == FieldType.Message && existingValue != null)
-             {
-                 IMessage existingMessage = (IMessage) existingValue;
-                 IMessag merged = existingMessage.WeakToBuilder()
-                     .WeakMergeFrom((IMessageLite) mergeValue)
-                     .WeakBuild();
-                 this[field] = merged;
-             }
-             else
-             {
-                 this[field] = mergeValue;
-             }
-         }*/
 
         /// <summary>
         /// Force coercion to full descriptor dictionary.
@@ -121,27 +83,7 @@ namespace Google.Protobuf.Reflection.Dynamic
             {
                 foreach (KeyValuePair<FieldDescriptor, object> entry in fields)
                 {
-                    /*IFieldDescriptorLite field = entry.Key;
-                    if (field.MappedType == Type.Message)
-                    {
-                        if (field.IsRepeated)
-                        {
-                            foreach (IMessageLite message in (IEnumerable) entry.Value)
-                            {
-                                if (!message.IsInitialized)
-                                {
-                                    return false;
-                                }
-                            }
-                        }
-                        else
-                        {
-                            if (!((IMessageLite) entry.Value).IsInitialized)
-                            {
-                                return false;
-                            }
-                        }
-                    }*/
+
                 }
                 return true;
             }
@@ -189,19 +131,6 @@ namespace Google.Protobuf.Reflection.Dynamic
                     break;
                 }
             }
-
-            /*if (hasRepeats)
-            {
-                var tmp = new SortedList<IFieldDescriptorLite, object>();
-                foreach (KeyValuePair<IFieldDescriptorLite, object> entry in fields)
-                {
-                    IList<object> list = entry.Value as IList<object>;
-                    tmp[entry.Key] = list == null ? entry.Value : Lists.AsReadOnly(list);
-                }
-                fields = tmp;
-            }*/
-
-            //fields = Dictionaries.AsReadOnly(fields);
 
             return this;
         }
@@ -255,7 +184,6 @@ namespace Google.Protobuf.Reflection.Dynamic
                     return CodedOutputStream.ComputeDoubleSize(Double.Parse(value.ToString()));
                 case FieldType.Message:
                     return CodedOutputStream.ComputeMessageSize((IMessage) value);
-                    //return ((DynamicMessage) value).CalculateSize();
 
             }
             throw new ArgumentException("unidentified type :" + fieldType.ToString());
@@ -278,8 +206,7 @@ namespace Google.Protobuf.Reflection.Dynamic
 
                 foreach (Object val in (IEnumerable) value)
                 {
-                    output.WriteTag(key.FieldNumber, WireFormat.WireType.LengthDelimited);
-                    WriteElementNoTag(output, fieldType, val);
+                    WriteElement(output, fieldType, key.FieldNumber, val);
                 }
             }
             else
@@ -330,7 +257,6 @@ namespace Google.Protobuf.Reflection.Dynamic
                     return;
                 case FieldType.Message:
                     output.WriteMessage((IMessage) value);
-                    //((DynamicMessage) value).WriteTo(output);
                     return;
             }
             throw new ArgumentException("unidentified type :" + type.ToString());

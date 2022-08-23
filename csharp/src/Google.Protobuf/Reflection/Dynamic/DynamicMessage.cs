@@ -10,7 +10,6 @@ namespace Google.Protobuf.Reflection.Dynamic
     /// An implementation of IMessage that can represent arbitrary types, given a MessageaDescriptor.
     /// </summary>
     public sealed partial class DynamicMessage : IMessage
-    //: AbstractMessage<DynamicMessage, DynamicMessage.Builder>
     {
         private readonly MessageDescriptor type;
         private readonly FieldSet fields;
@@ -28,7 +27,7 @@ namespace Google.Protobuf.Reflection.Dynamic
         /// <returns></returns>
         public static Builder CreateBuilder(MessageDescriptor prototype)
         {
-            return new Builder(prototype);//.MergeFrom(prototype);
+            return new Builder(prototype);
         }
 
         public void MergeFrom(CodedInputStream input)
@@ -64,7 +63,7 @@ namespace Google.Protobuf.Reflection.Dynamic
         /// <summary>
         /// Builder for dynamic messages. Instances are created with DynamicMessage.CreateBuilder..
         /// </summary>
-        public sealed partial class Builder //: AbstractBuilder<DynamicMessage, Builder>
+        public sealed partial class Builder
         {
 
             private readonly MessageDescriptor type;
@@ -78,21 +77,7 @@ namespace Google.Protobuf.Reflection.Dynamic
                 this.UnknownFields = new UnknownFieldSet();
             }
 
-            /* public Builder MergeFrom(MessageDescriptor other)
-             {
-                 if (other != type)
-                 {
-                     throw new ArgumentException("MergeFrom(IMessage) can only merge messages of the same type.");
-                 }
-                 fields.MergeFrom(other);
-                 // MergeUnknownFields(other.Fields.); TODO
-                 return this;
-             }*/
 
-            /*private void MergeUnknownFields(UnknownFieldSet unknownFields)
-            {
-                UnknownFields = UnknownFieldSet.MergeFrom(unknownFields, UnknownFields);
-            }*/
 
             public IDictionary<FieldDescriptor, object> AllFields
             {
@@ -123,7 +108,7 @@ namespace Google.Protobuf.Reflection.Dynamic
             {
                 if (fields != null && !IsInitialized)
                 {
-                    throw new UninitializedMessageException(new DynamicMessage(type, fields, UnknownFields));
+                    throw new Exception(String.Format("Message {0} is missing required fields", new DynamicMessage(type, fields, UnknownFields).GetType()));
                 }
                 return BuildPartial();
             }
