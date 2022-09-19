@@ -30,11 +30,10 @@
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #endregion
 
-using System;
 using Google.Protobuf.TestProtos;
-using Proto2 = Google.Protobuf.TestProtos.Proto2;
-
+using System;
 using static Google.Protobuf.TestProtos.Proto2.UnittestExtensions;
+using Proto2 = Google.Protobuf.TestProtos.Proto2;
 
 namespace Google.Protobuf
 {
@@ -79,13 +78,13 @@ namespace Google.Protobuf
                 RepeatedFixed32 = { UInt32.MaxValue, 23 },
                 RepeatedFixed64 = { UInt64.MaxValue, 1234567890123 },
                 RepeatedFloat = { 100f, 12.25f },
-                RepeatedForeignEnum = { ForeignEnum.ForeignFoo, ForeignEnum.ForeignBar },
+                //RepeatedForeignEnum = { ForeignEnum.ForeignFoo, ForeignEnum.ForeignBar },
                 RepeatedForeignMessage = { new ForeignMessage(), new ForeignMessage { C = 10 } },
-                RepeatedImportEnum = { ImportEnum.ImportBaz, ImportEnum.Unspecified },
+                //RepeatedImportEnum = { ImportEnum.ImportBaz, ImportEnum.Unspecified },
                 RepeatedImportMessage = { new ImportMessage { D = 20 }, new ImportMessage { D = 25 } },
                 RepeatedInt32 = { 100, 200 },
                 RepeatedInt64 = { 3210987654321, Int64.MaxValue },
-                RepeatedNestedEnum = { TestProtos.TestAllTypes.Types.NestedEnum.Foo, TestProtos.TestAllTypes.Types.NestedEnum.Neg },
+                //RepeatedNestedEnum = { TestProtos.TestAllTypes.Types.NestedEnum.Foo, TestProtos.TestAllTypes.Types.NestedEnum.Neg },
                 RepeatedNestedMessage = { new TestAllTypes.Types.NestedMessage { Bb = 35 }, new TestAllTypes.Types.NestedMessage { Bb = 10 } },
                 RepeatedPublicImportMessage = { new PublicImportMessage { E = 54 }, new PublicImportMessage { E = -1 } },
                 RepeatedSfixed32 = { -123, 123 },

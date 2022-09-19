@@ -61,21 +61,7 @@ namespace Google.Protobuf.Reflection.Dynamic
             }
         }
 
-        internal void AddRepeatedField(FieldDescriptor field, object value)
-        {
-            if (!field.IsRepeated)
-            {
-                throw new ArgumentException("AddRepeatedField can only be called on repeated fields.");
-            }
-            //VerifyType(field, value);
-            object list;
-            if (!fields.TryGetValue(field, out list))
-            {
-                list = new List<object>();
-                fields[field] = list;
-            }
-            ((IList<object>) list).Add(value);
-        }
+
 
         internal bool IsInitialized
         {
@@ -241,6 +227,7 @@ namespace Google.Protobuf.Reflection.Dynamic
 
         private void WriteElementNoTag(CodedOutputStream output, FieldType type, object value)
         {
+            Console.WriteLine("type:" + type.ToString() + ", value:" + value);
             switch (type)
             {
                 case FieldType.String:
@@ -261,6 +248,39 @@ namespace Google.Protobuf.Reflection.Dynamic
             }
             throw new ArgumentException("unidentified type :" + type.ToString());
         }
+
+        internal void SetField(FieldDescriptor field, object value)
+        {
+            fields.Add(field, value);
+        }
+
+        internal void AddRepeatedField(FieldDescriptor field, object value)
+        {
+            if (!field.IsRepeated)
+            {
+                throw new ArgumentException("AddRepeatedField can only be called on repeated fields.");
+            }
+            //VerifyType(field, value);
+            // TODO what about the elements already present in the list
+            if (!fields.TryGetValue(field, out object list))
+            {
+                list = new List<object>();
+                fields[field] = list;
+            }
+
+            ((IList<object>) list).Add(value);
+        }
+
+        internal object GetField(FieldDescriptor fd)
+        {
+            fields.TryGetValue(fd, out object value);
+            return value;
+        }
+
+        /*internal void setField(FieldDescriptor field, FieldType fieldType)
+        {
+            throw new NotImplementedException();
+        }*/
     }
 
 }
