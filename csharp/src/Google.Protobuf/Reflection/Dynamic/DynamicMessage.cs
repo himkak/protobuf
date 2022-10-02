@@ -27,10 +27,10 @@ namespace Google.Protobuf.Reflection.Dynamic
         /// </summary>
         /// <param name="prototype"></param>
         /// <returns></returns>
-        public static Builder CreateBuilder(MessageDescriptor prototype)
+       /* public static Builder CreateBuilder(MessageDescriptor prototype)
         {
             return new Builder(prototype);
-        }
+        }*/
 
         public void MergeFrom(CodedInputStream input)
         {
@@ -62,7 +62,7 @@ namespace Google.Protobuf.Reflection.Dynamic
             return builder.BuildParsed();
         }
 
-        private static Builder NewBuilder(MessageDescriptor type)
+        public static Builder NewBuilder(MessageDescriptor type)
         {
             return new Builder(type);
         }
@@ -148,7 +148,7 @@ namespace Google.Protobuf.Reflection.Dynamic
                 return BuildPartial();
             }
 
-            public DynamicMessage BuildPartial()
+            private DynamicMessage BuildPartial()
             {
                 if (fields == null)
                 {
@@ -175,7 +175,7 @@ namespace Google.Protobuf.Reflection.Dynamic
                 while ((tag = input.ReadTag()) != 0)
                 {
                     int fieldNumber = WireFormat.GetTagFieldNumber(tag);
-                    var wireType = WireFormat.GetTagWireType(tag);
+                    //var wireType = WireFormat.GetTagWireType(tag);
                     FieldDescriptor fd = type.FindFieldByNumber(fieldNumber);
                     //Console.WriteLine("Processing field:" + fd.FullName);
 
@@ -191,7 +191,7 @@ namespace Google.Protobuf.Reflection.Dynamic
                         input.ReadMessage(value);
                         DynamicMessage res = value.Build();
                         if (fd.ToProto().Label != FieldDescriptorProto.Types.Label.Repeated)
-                            SetField(fd, res);
+                            fields.SetField(fd, res);
                         else
                             fields.AddRepeatedField(fd, res);
                         Console.WriteLine("Processing complex field ended: " + fd.FullName + ", fieldNumber:" + fieldNumber + ", tag:" + tag);
@@ -207,7 +207,7 @@ namespace Google.Protobuf.Reflection.Dynamic
                         {
                             object value = ReadField(fd.FieldType, input);
                             Console.WriteLine("Processing primitive field:" + fd.FullName + ", fieldNumber:" + fieldNumber + ", tag:" + tag + ", value:" + value + ", Label:" + fd.ToProto().Label);
-                            SetField(fd, value);
+                            fields.SetField(fd, value);
                         }
                         else if (fd.ToProto().Label == FieldDescriptorProto.Types.Label.Repeated)
                         {

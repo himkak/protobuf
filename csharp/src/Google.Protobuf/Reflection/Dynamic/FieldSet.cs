@@ -145,12 +145,12 @@ namespace Google.Protobuf.Reflection.Dynamic
             }
             else
             {
-                return computeElementSize(desc.FieldType, desc.FieldNumber, value);
+                return ComputeElementSize(desc.FieldType, desc.FieldNumber, value);
             }
 
         }
 
-        private int computeElementSize(FieldType fieldType, int fieldNumber, object value)
+        private int ComputeElementSize(FieldType fieldType, int fieldNumber, object value)
         {
             int tagSize = CodedOutputStream.ComputeTagSize(fieldNumber);
             return tagSize + ComputeElementSizeNoTag(fieldType, value);
@@ -163,13 +163,37 @@ namespace Google.Protobuf.Reflection.Dynamic
                 case FieldType.String:
                     return CodedOutputStream.ComputeStringSize(value.ToString());
                 case FieldType.Bool:
-                    return CodedOutputStream.ComputeBoolSize(Boolean.Parse(value.ToString()));
+                    return CodedOutputStream.ComputeBoolSize(bool.Parse(value.ToString()));
                 case FieldType.Int32:
-                    return CodedOutputStream.ComputeInt32Size(Int32.Parse(value.ToString()));
+                    return CodedOutputStream.ComputeInt32Size(int.Parse(value.ToString()));
+                case FieldType.Int64:
+                    return CodedOutputStream.ComputeInt64Size(long.Parse(value.ToString()));
                 case FieldType.Double:
-                    return CodedOutputStream.ComputeDoubleSize(Double.Parse(value.ToString()));
+                    return CodedOutputStream.ComputeDoubleSize(double.Parse(value.ToString()));
+                case FieldType.Float:
+                    return CodedOutputStream.ComputeFloatSize(float.Parse(value.ToString()));
+                case FieldType.Bytes:
+                    return CodedOutputStream.ComputeBytesSize((ByteString) value);
+                case FieldType.UInt32:
+                    return CodedOutputStream.ComputeUInt32Size(uint.Parse(value.ToString()));
+                case FieldType.UInt64:
+                    return CodedOutputStream.ComputeUInt64Size(ulong.Parse(value.ToString()));
+                case FieldType.SInt32:
+                    return CodedOutputStream.ComputeSInt32Size(int.Parse(value.ToString()));
+                case FieldType.SInt64:
+                    return CodedOutputStream.ComputeSInt64Size(long.Parse(value.ToString()));
+                case FieldType.Fixed32:
+                    return CodedOutputStream.ComputeFixed32Size(uint.Parse(value.ToString()));
+                case FieldType.Fixed64:
+                    return CodedOutputStream.ComputeFixed64Size(ulong.Parse(value.ToString()));
+                case FieldType.SFixed32:
+                    return CodedOutputStream.ComputeSFixed32Size(int.Parse(value.ToString()));
+                case FieldType.SFixed64:
+                    return CodedOutputStream.ComputeSFixed64Size(long.Parse(value.ToString()));
                 case FieldType.Message:
                     return CodedOutputStream.ComputeMessageSize((IMessage) value);
+                case FieldType.Enum:
+                    return CodedOutputStream.ComputeEnumSize((int) value);
 
             }
             throw new ArgumentException("unidentified type :" + fieldType.ToString());
@@ -211,16 +235,42 @@ namespace Google.Protobuf.Reflection.Dynamic
         {
             switch (type)
             {
+                case FieldType.Float:
+                    return WireFormat.WireType.Fixed32;
+                case FieldType.Fixed32:
+                    return WireFormat.WireType.Fixed32;
+                case FieldType.SFixed32:
+                    return WireFormat.WireType.Fixed32;
+                case FieldType.Fixed64:
+                    return WireFormat.WireType.Fixed64;
+                case FieldType.SFixed64:
+                    return WireFormat.WireType.Fixed64;
                 case FieldType.Double:
                     return WireFormat.WireType.Fixed64;
                 case FieldType.Bool:
                     return WireFormat.WireType.Varint;
                 case FieldType.Int32:
                     return WireFormat.WireType.Varint;
+                case FieldType.Int64:
+                    return WireFormat.WireType.Varint;
+                case FieldType.UInt32:
+                    return WireFormat.WireType.Varint;
+                case FieldType.UInt64:
+                    return WireFormat.WireType.Varint;
+                case FieldType.Enum:
+                    return WireFormat.WireType.Varint;
+                case FieldType.SInt32:
+                    return WireFormat.WireType.Varint;
+                case FieldType.SInt64:
+                    return WireFormat.WireType.Varint;
                 case FieldType.String:
+                    return WireFormat.WireType.LengthDelimited;
+                case FieldType.Bytes:
                     return WireFormat.WireType.LengthDelimited;
                 case FieldType.Message:
                     return WireFormat.WireType.LengthDelimited;
+                case FieldType.Group:
+                    return WireFormat.WireType.StartGroup;
             }
             throw new ArgumentException("unidentified type :" + type.ToString());
         }
@@ -239,8 +289,44 @@ namespace Google.Protobuf.Reflection.Dynamic
                 case FieldType.Int32:
                     output.WriteInt32((int) value);
                     return;
+                case FieldType.Int64:
+                    output.WriteInt64((long) value);
+                    return;
                 case FieldType.Double:
                     output.WriteDouble((double) value);
+                    return;
+                case FieldType.UInt32:
+                    output.WriteUInt32((uint) value);
+                    return;
+                case FieldType.UInt64:
+                    output.WriteUInt64((ulong) value);
+                    return;
+                case FieldType.SInt32:
+                    output.WriteSInt32((int) value);
+                    return;
+                case FieldType.SInt64:
+                    output.WriteSInt64((long) value);
+                    return;
+                case FieldType.Fixed32:
+                    output.WriteFixed32((uint) value);
+                    return;
+                case FieldType.Fixed64:
+                    output.WriteFixed64((ulong) value);
+                    return;
+                case FieldType.SFixed32:
+                    output.WriteSFixed32((int) value);
+                    return;
+                case FieldType.SFixed64:
+                    output.WriteSFixed64((long) value);
+                    return;
+                case FieldType.Float:
+                    output.WriteFloat((float) value);
+                    return;
+                case FieldType.Bytes:
+                    output.WriteBytes((ByteString) value);
+                    return;
+                case FieldType.Enum:
+                    output.WriteEnum((int) value);
                     return;
                 case FieldType.Message:
                     output.WriteMessage((IMessage) value);
