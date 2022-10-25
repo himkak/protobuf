@@ -3,6 +3,6 @@
 /csharp/**
 .sparse
 .gitignore
-!/examples
-!/objectivec
-!/ruby
+!/examples/**
+!/objectivec/**
+!/ruby/**
