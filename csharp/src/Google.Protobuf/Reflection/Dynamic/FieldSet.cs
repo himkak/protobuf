@@ -1,12 +1,11 @@
 ﻿using System;
 using System.Collections;
 using System.Collections.Generic;
-using Type = Google.Protobuf.WellKnownTypes.Type;
 
 namespace Google.Protobuf.Reflection.Dynamic
 {
 
-    public interface IFieldDescriptorLite : IComparable<IFieldDescriptorLite>
+    /*public interface IFieldDescriptorLite : IComparable<IFieldDescriptorLite>
     {
         bool IsRepeated { get; }
         bool IsRequired { get; }
@@ -21,7 +20,7 @@ namespace Google.Protobuf.Reflection.Dynamic
         Type MappedType { get; }
         //MappedType MappedType { get; }
         object DefaultValue { get; }
-    }
+    }*/
 
     internal sealed class FieldSet
     {
@@ -55,7 +54,6 @@ namespace Google.Protobuf.Reflection.Dynamic
                     FieldDescriptor fieldDesc = fd.Key;
                     copy.Add(fieldDesc, fd.Value);
                 }
-                //return Dictionaries.AsReadOnly(copy);
                 fields = copy;
                 return fields;
             }
@@ -277,7 +275,6 @@ namespace Google.Protobuf.Reflection.Dynamic
 
         private void WriteElementNoTag(CodedOutputStream output, FieldType type, object value)
         {
-            Console.WriteLine("type:" + type.ToString() + ", value:" + value);
             switch (type)
             {
                 case FieldType.String:
@@ -346,7 +343,6 @@ namespace Google.Protobuf.Reflection.Dynamic
             {
                 throw new ArgumentException("AddRepeatedField can only be called on repeated fields.");
             }
-            //VerifyType(field, value);
             // TODO what about the elements already present in the list
             if (!fields.TryGetValue(field, out object list))
             {
@@ -363,10 +359,6 @@ namespace Google.Protobuf.Reflection.Dynamic
             return value;
         }
 
-        /*internal void setField(FieldDescriptor field, FieldType fieldType)
-        {
-            throw new NotImplementedException();
-        }*/
     }
 
 }

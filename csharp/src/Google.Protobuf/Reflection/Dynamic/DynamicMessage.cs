@@ -1,9 +1,6 @@
-﻿//using Google.ProtocolBuffers.Descriptors;
-
-using Google.Protobuf.Collections;
+﻿using Google.Protobuf.Collections;
 using System;
 using System.Collections;
-using System.Collections.Generic;
 
 namespace Google.Protobuf.Reflection.Dynamic
 {
@@ -19,18 +16,6 @@ namespace Google.Protobuf.Reflection.Dynamic
         private int memoizedSize = -1;
 
         public MessageDescriptor Descriptor => type;
-
-
-        /// <summary>
-        /// Constructs a builder for a message of the same type as <paramref name="prototype"/>,
-        /// and initializes it with the same contents.
-        /// </summary>
-        /// <param name="prototype"></param>
-        /// <returns></returns>
-       /* public static Builder CreateBuilder(MessageDescriptor prototype)
-        {
-            return new Builder(prototype);
-        }*/
 
         public void MergeFrom(CodedInputStream input)
         {
@@ -57,7 +42,6 @@ namespace Google.Protobuf.Reflection.Dynamic
         public static DynamicMessage ParseFrom(MessageDescriptor type, ByteString data)
         {
             Builder builder = NewBuilder(type);
-            //Console.WriteLine(data.ToStringUtf8());
             builder.MergeFrom(data);
             return builder.BuildParsed();
         }
@@ -69,7 +53,6 @@ namespace Google.Protobuf.Reflection.Dynamic
 
         public object GetField(FieldDescriptor fd)
         {
-            //TODO
             return fields.GetField(fd);
         }
 
@@ -96,40 +79,6 @@ namespace Google.Protobuf.Reflection.Dynamic
                 this.type = type;
                 this.fields = FieldSet.CreateInstance();
                 this.UnknownFields = new UnknownFieldSet();
-            }
-
-
-
-            public IDictionary<FieldDescriptor, object> AllFields
-            {
-                get { return fields.AllFieldDescriptors; }
-            }
-
-            /*public void AddRepeatedField(FieldDescriptor field, CodedInputStream input)
-            {
-                int fieldNumber = WireFormat.GetTagFieldNumber(input.ReadTag());
-                FieldDescriptor fd = type.FindFieldByNumber(fieldNumber);
-                VerifyContainingType(field);
-                foreach (object elem in (List<object>) value)
-                {
-                    fields.AddRepeatedField(field, elem);
-                }
-            }*/
-
-            public void SetField(FieldDescriptor fd, object value)
-            {
-                fields.SetField(fd, value);
-                //AllFields.Add(fd, value);
-            }
-
-
-
-            private void VerifyContainingType(FieldDescriptor field)
-            {
-                if (field.ContainingType != type)
-                {
-                    throw new ArgumentException("FieldDescriptor does not match message type.");
-                }
             }
 
             public bool IsInitialized
@@ -161,23 +110,13 @@ namespace Google.Protobuf.Reflection.Dynamic
                 return result;
             }
 
-            /*public Builder MergeFrom(ByteString data)
-            {
-                *//*CodedInputStream input = data.CreateCodedInput();
-                MergeFrom(input);
-                return null;*//*
-            }*/
-
             public void MergeFrom(CodedInputStream input)
             {
-                //input.ReadRawMessage(this);
                 uint tag;
                 while ((tag = input.ReadTag()) != 0)
                 {
                     int fieldNumber = WireFormat.GetTagFieldNumber(tag);
-                    //var wireType = WireFormat.GetTagWireType(tag);
                     FieldDescriptor fd = type.FindFieldByNumber(fieldNumber);
-                    //Console.WriteLine("Processing field:" + fd.FullName);
 
                     if (fd == null)
                     {
@@ -185,8 +124,6 @@ namespace Google.Protobuf.Reflection.Dynamic
                     }
                     if (fd.FieldType == FieldType.Message)
                     {
-                        Console.WriteLine("Processing complex field started: " + fd.FullName + ", fieldNumber:" + fieldNumber + ", tag:" + tag);
-
                         Builder value = NewBuilder(fd.MessageType);
                         input.ReadMessage(value);
                         DynamicMessage res = value.Build();
@@ -194,41 +131,22 @@ namespace Google.Protobuf.Reflection.Dynamic
                             fields.SetField(fd, res);
                         else
                             fields.AddRepeatedField(fd, res);
-                        Console.WriteLine("Processing complex field ended: " + fd.FullName + ", fieldNumber:" + fieldNumber + ", tag:" + tag);
                     }
-                    /*else if (fd.FieldType == FieldType.Enum)
-                    {
-
-                    }*/
                     else
                     {
 
                         if (fd.ToProto().Label != FieldDescriptorProto.Types.Label.Repeated)
                         {
                             object value = ReadField(fd.FieldType, input);
-                            Console.WriteLine("Processing primitive field:" + fd.FullName + ", fieldNumber:" + fieldNumber + ", tag:" + tag + ", value:" + value + ", Label:" + fd.ToProto().Label);
                             fields.SetField(fd, value);
                         }
                         else if (fd.ToProto().Label == FieldDescriptorProto.Types.Label.Repeated)
                         {
-                            Console.WriteLine("Processing primitive field:" + fd.FullName + ", fieldNumber:" + fieldNumber + ", tag:" + tag);
-                            //RepeatedField rp = new Collections.RepeatedField();
-
-                            //fields.AddRepeatedField(fd, value);
-                            //input.
-                            /*var fc = GetFieldCodec(tag, fd.FieldType);
-                            RepeatedField<object> rf = new RepeatedField<object>();
-                            rf.AddEntriesFrom(input, fc);
-                            int cnt = rf.Count;
-                            IEnumerator enumerator = rf.GetEnumerator();*/
                             IEnumerator enumerator = GetFieldCodec(tag, fd.FieldType, input);
                             while (enumerator.MoveNext())
                             {
-                                Console.WriteLine(enumerator.Current);
                                 fields.AddRepeatedField(fd, enumerator.Current);
                             }
-                            //Console.WriteLine("1:" + ReadField(fd.FieldType, input));
-                            //Console.WriteLine("2:" + ReadField(fd.FieldType, input));
                         }
                         else
                         {
@@ -237,9 +155,6 @@ namespace Google.Protobuf.Reflection.Dynamic
                     }
 
                 }
-                //input.ReadRawMessage(this);
-                //fields.MergeFrom(input);
-                //MessageExtensions.MergeFrom(input);
             }
 
             private static IEnumerator GetFieldCodec(uint tag, FieldType fieldType, CodedInputStream input)
@@ -361,11 +276,6 @@ namespace Google.Protobuf.Reflection.Dynamic
                 return null;
             }
 
-            /*private void MergeFrom(CodedInputStream input, ExtensionRegistry extensionRegistry)
-            {
-                throw new NotImplementedException();
-            }*/
-
             void IMessage.WriteTo(CodedOutputStream output)
             {
                 throw new NotImplementedException();
@@ -378,39 +288,12 @@ namespace Google.Protobuf.Reflection.Dynamic
 
             internal DynamicMessage BuildParsed()
             {
-
-                /*if (type.GetOptions().MapEntry)
-                {
-                    foreach (FieldDescriptor field in type.Fields.InDeclarationOrder())
-                    {
-                        if (!fields.HasField(field))
-                        {
-                            if (field.FieldType == FieldType.Message)
-                            {
-                                DynamicMessage dm = new DynamicMessage(field.MessageType, fields, UnknownFields);
-                                fields.SetField(field, dm);
-                            }
-                            else
-                            {
-                                fields.SetField(field, field.FieldType);
-                            }
-
-                        }
-
-                    }
-                }*/
-
                 fields.MakeImmutable();
                 DynamicMessage result = new DynamicMessage(type, fields, UnknownFields);
                 return result;
             }
 
-            public void AddRepeatedField(FieldDescriptor fd, object v)
-            {
-                fields.AddRepeatedField(fd, v);
-            }
         }
-
 
     }
 

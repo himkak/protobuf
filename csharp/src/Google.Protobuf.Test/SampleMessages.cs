@@ -30,10 +30,11 @@
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #endregion
 
-using Google.Protobuf.TestProtos;
 using System;
-using static Google.Protobuf.TestProtos.Proto2.UnittestExtensions;
+using Google.Protobuf.TestProtos;
 using Proto2 = Google.Protobuf.TestProtos.Proto2;
+
+using static Google.Protobuf.TestProtos.Proto2.UnittestExtensions;
 
 namespace Google.Protobuf
 {
