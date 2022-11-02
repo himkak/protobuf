@@ -7,12 +7,12 @@ namespace Google.Protobuf.Reflection.Dynamic
 
     /// <summary>
     /// An implementation of IMessage that can represent arbitrary types, given a MessageaDescriptor.
+    /// Unknown fields not supported.
     /// </summary>
     public sealed partial class DynamicMessage : IMessage
     {
         private readonly MessageDescriptor type;
         private readonly FieldSet fields;
-        private readonly UnknownFieldSet unknownFields;
         private int memoizedSize = -1;
 
         /// <summary>
@@ -87,11 +87,10 @@ namespace Google.Protobuf.Reflection.Dynamic
             return fields.GetField(fd);
         }
 
-        private DynamicMessage(MessageDescriptor type, FieldSet fields, UnknownFieldSet unknownFields)
+        private DynamicMessage(MessageDescriptor type, FieldSet fields)
         {
             this.type = type;
             this.fields = fields;
-            this.unknownFields = unknownFields;
         }
 
 
@@ -103,13 +102,11 @@ namespace Google.Protobuf.Reflection.Dynamic
 
             private readonly MessageDescriptor type;
             private FieldSet fields;
-            private UnknownFieldSet UnknownFields;
 
             internal Builder(MessageDescriptor type)
             {
                 this.type = type;
                 this.fields = FieldSet.CreateInstance();
-                this.UnknownFields = new UnknownFieldSet();
             }
 
             private bool IsInitialized
@@ -128,7 +125,7 @@ namespace Google.Protobuf.Reflection.Dynamic
             {
                 if (fields != null && !IsInitialized)
                 {
-                    throw new Exception(String.Format("Message {0} is missing required fields", new DynamicMessage(type, fields, UnknownFields).GetType()));
+                    throw new Exception(String.Format("Message {0} is missing required fields", new DynamicMessage(type, fields).GetType()));
                 }
                 return BuildPartial();
             }
@@ -159,10 +156,8 @@ namespace Google.Protobuf.Reflection.Dynamic
                 {
                     throw new InvalidOperationException("Build() has already been called on this Builder.");
                 }
-                fields.MakeImmutable();
-                DynamicMessage result = new DynamicMessage(type, fields, UnknownFields);
+                DynamicMessage result = new DynamicMessage(type, fields);
                 fields = null;
-                UnknownFields = null;
                 return result;
             }
 
@@ -174,7 +169,6 @@ namespace Google.Protobuf.Reflection.Dynamic
             public void MergeFrom(CodedInputStream input)
             {
                 uint tag;
-                Console.WriteLine("Inside mergeFrom");
                 while ((tag = input.ReadTag()) != 0)
                 {
                     int fieldNumber = WireFormat.GetTagFieldNumber(tag);
@@ -184,51 +178,44 @@ namespace Google.Protobuf.Reflection.Dynamic
                     {
                         throw new Exception("Field descriptor not found for fieldNumber:" + fieldNumber);
                     }
-                    Console.WriteLine("fieldName:" + fd.Name);
                     if (fd.FieldType == FieldType.Message)
                     {
-                        Builder value = NewBuilder(fd.MessageType);
-
-
-                        if (fd.ToProto().Label != FieldDescriptorProto.Types.Label.Repeated)
-                        {
-                            input.ReadMessage(value);
-                            DynamicMessage res = value.Build();
-                            fields.SetField(fd, res);
-                        }
-                        else
-                        {
-                            /*if (fd.IsPacked)
-                                input.ReadUInt32();*/
-                            input.ReadMessage(value);
-                            DynamicMessage res = value.Build();
-                            fields.AddRepeatedField(fd, res);
-                        }
+                        MergeFromMessageTypeField(input, fd);
                     }
                     else
                     {
-
-                        if (fd.ToProto().Label != FieldDescriptorProto.Types.Label.Repeated)
-                        {
-                            object value = ReadField(fd.FieldType, input);
-                            fields.SetField(fd, value);
-                        }
-                        else if (fd.ToProto().Label == FieldDescriptorProto.Types.Label.Repeated)
-                        {
-                            /*if (fd.IsPacked)
-                                input.ReadUInt32();*/
-                            IEnumerator enumerator = GetFieldCodec(tag, fd.FieldType, input);
-                            while (enumerator.MoveNext())
-                            {
-                                fields.AddRepeatedField(fd, enumerator.Current);
-                            }
-                        }
-                        else
-                        {
-                            UnknownFields = UnknownFieldSet.MergeFieldFrom(UnknownFields, input);
-                        }
+                        MergeFromPrimitiveTypeField(input, tag, fd);
                     }
                 }
+            }
+
+            private void MergeFromPrimitiveTypeField(CodedInputStream input, uint tag, FieldDescriptor fd)
+            {
+                if (fd.ToProto().Label != FieldDescriptorProto.Types.Label.Repeated)
+                {
+                    object value = ReadField(fd.FieldType, input);
+                    fields.SetField(fd, value);
+                }
+                else
+                {
+                    IEnumerator enumerator = GetFieldCodec(tag, fd.FieldType, input);
+                    while (enumerator.MoveNext())
+                    {
+                        fields.AddRepeatedField(fd, enumerator.Current);
+                    }
+                }
+
+            }
+
+            private void MergeFromMessageTypeField(CodedInputStream input, FieldDescriptor fd)
+            {
+                Builder value = NewBuilder(fd.MessageType);
+                input.ReadMessage(value);
+                DynamicMessage val = value.Build();
+                if (fd.ToProto().Label != FieldDescriptorProto.Types.Label.Repeated)
+                    fields.SetField(fd, val);
+                else
+                    fields.AddRepeatedField(fd, val);
             }
 
             /// <summary>
@@ -359,8 +346,7 @@ namespace Google.Protobuf.Reflection.Dynamic
             /// <returns></returns>
             internal DynamicMessage BuildParsed()
             {
-                fields.MakeImmutable();
-                DynamicMessage result = new DynamicMessage(type, fields, UnknownFields);
+                DynamicMessage result = new DynamicMessage(type, fields);
                 return result;
             }
 

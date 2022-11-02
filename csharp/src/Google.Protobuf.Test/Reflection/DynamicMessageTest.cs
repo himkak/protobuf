@@ -84,7 +84,7 @@ namespace Google.Protobuf.Reflection
                 SingleImportMessage = new ImportMessage { D = 20 },
                 SingleInt32 = 100,
                 SingleInt64 = 3210987654321,
-                SingleNestedEnum = TestProtos.TestAllTypes.Types.NestedEnum.Foo,
+                SingleNestedEnum = TestAllTypes.Types.NestedEnum.Foo,
                 SingleNestedMessage = new TestAllTypes.Types.NestedMessage { Bb = 35 },
                 SinglePublicImportMessage = new PublicImportMessage { E = 54 },
                 SingleSfixed32 = -123,
@@ -95,10 +95,10 @@ namespace Google.Protobuf.Reflection
                 SingleUint32 = UInt32.MaxValue,
                 SingleUint64 = UInt64.MaxValue,
                 RepeatedBytes = { ByteString.CopyFrom(1, 2, 3, 4), ByteString.CopyFrom(5, 6), ByteString.CopyFrom(new byte[1000]) },
-                //RepeatedForeignMessage = { new ForeignMessage(), new ForeignMessage { C = 10 } },
-                //RepeatedImportMessage = { new ImportMessage { D = 20 }, new ImportMessage { D = 25 } },
-                //RepeatedNestedMessage = { new TestAllTypes.Types.NestedMessage { Bb = 35 }, new TestAllTypes.Types.NestedMessage { Bb = 10 } },
-                //RepeatedPublicImportMessage = { new PublicImportMessage { E = 54 }, new PublicImportMessage { E = -1 } },
+                RepeatedForeignMessage = { new ForeignMessage(), new ForeignMessage { C = 10 } },
+                RepeatedImportMessage = { new ImportMessage { D = 20 }, new ImportMessage { D = 25 } },
+                RepeatedNestedMessage = { new TestAllTypes.Types.NestedMessage { Bb = 35 }, new TestAllTypes.Types.NestedMessage { Bb = 10 } },
+                RepeatedPublicImportMessage = { new PublicImportMessage { E = 54 }, new PublicImportMessage { E = -1 } },
                 RepeatedString = { "foo", "bar" },
                 OneofString = "Oneof string",
                 RepeatedBool = { true, false },
@@ -113,7 +113,7 @@ namespace Google.Protobuf.Reflection
                 RepeatedFixed64 = { UInt64.MaxValue, 1234567890123 },
                 RepeatedFloat = { 100f, 12.25f },
                 RepeatedUint32 = { UInt32.MaxValue, UInt32.MinValue },
-                RepeatedUint64 = { UInt64.MaxValue, UInt32.MinValue }
+                RepeatedUint64 = { UInt64.MaxValue, UInt64.MinValue },
 
                 //RepeatedForeignEnum = { ForeignEnum.ForeignFoo, ForeignEnum.ForeignBar },
                 //RepeatedImportEnum = { ImportEnum.ImportBaz, ImportEnum.Unspecified },
@@ -129,15 +129,31 @@ namespace Google.Protobuf.Reflection
             Assert.AreEqual(4294967295, GetField(desc, res, "repeated_fixed32[0]"));
             Assert.AreEqual(10, GetField(desc, res, "single_foreign_message.c"));
             Assert.AreEqual(20, GetField(desc, res, "single_import_message.d"));
+            Assert.AreEqual((int) TestAllTypes.Types.NestedEnum.Foo, GetField(desc, res, "single_nested_enum"));
             Assert.AreEqual(54, GetField(desc, res, "single_public_import_message.e"));
             Assert.AreEqual((int) ForeignEnum.ForeignBar, GetField(desc, res, "single_foreign_enum"));
-            /*Assert.AreEqual(10, GetField(desc, res, "repeated_foreign_message[1].c"));
+            Assert.AreEqual(ByteString.CopyFrom(1, 2, 3, 4), GetField(desc, res, "repeated_bytes[0]"));
+            Assert.AreEqual(ByteString.CopyFrom(5, 6), GetField(desc, res, "repeated_bytes[1]"));
+            Assert.AreEqual(10, GetField(desc, res, "repeated_foreign_message[1].c"));
+            Assert.AreEqual(null, GetField(desc, res, "repeated_foreign_message[0].c"));
+            Assert.AreEqual(10, GetField(desc, res, "repeated_foreign_message[1].c"));
             Assert.AreEqual(20, GetField(desc, res, "repeated_import_message[0].d"));
             Assert.AreEqual(25, GetField(desc, res, "repeated_import_message[1].d"));
+            Assert.AreEqual(35, GetField(desc, res, "repeated_nested_message[0].bb"));
+            Assert.AreEqual(10, GetField(desc, res, "repeated_nested_message[1].bb"));
             Assert.AreEqual(54, GetField(desc, res, "repeated_public_import_message[0].e"));
             Assert.AreEqual(-1, GetField(desc, res, "repeated_public_import_message[1].e"));
-            Assert.AreEqual(35, GetField(desc, res, "repeated_nested_message[0].bb"));
-            Assert.AreEqual(10, GetField(desc, res, "repeated_nested_message[1].bb"));*/
+            Assert.AreEqual("foo", GetField(desc, res, "repeated_string[0]"));
+            Assert.AreEqual("bar", GetField(desc, res, "repeated_string[1]"));
+            Assert.AreEqual("Oneof string", GetField(desc, res, "oneof_string"));
+            Assert.AreEqual(UInt64.MaxValue, GetField(desc, res, "repeated_fixed64[0]"));
+            Assert.AreEqual(1234567890123, GetField(desc, res, "repeated_fixed64[1]"));
+            Assert.AreEqual(100f, GetField(desc, res, "repeated_float[0]"));
+            Assert.AreEqual(12.25f, GetField(desc, res, "repeated_float[1]"));
+            Assert.AreEqual(UInt32.MaxValue, GetField(desc, res, "repeated_uint32[0]"));
+            Assert.AreEqual(UInt32.MinValue, GetField(desc, res, "repeated_uint32[1]"));
+            Assert.AreEqual(UInt64.MaxValue, GetField(desc, res, "repeated_uint64[0]"));
+            Assert.AreEqual(UInt64.MinValue, GetField(desc, res, "repeated_uint64[1]"));
         }
 
         private object GetField(MessageDescriptor desc, DynamicMessage dm, String fieldFullName)

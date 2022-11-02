@@ -57,28 +57,6 @@ namespace Google.Protobuf.Reflection.Dynamic
         }
 
         /// <summary>
-        /// Makes this FieldSet immutable, and returns it for convenience. Any
-        /// mutable repeated fields are made immutable, as well as the map itself.
-        /// </summary>
-        internal FieldSet MakeImmutable()
-        {
-            // First check if we have any repeated values
-            bool hasRepeats = false;
-            // TODO to make the fieldSet immutable.
-            foreach (object value in fields.Values)
-            {
-                IList<object> list = value as IList<object>;
-                if (list != null && !list.IsReadOnly)
-                {
-                    hasRepeats = true;
-                    break;
-                }
-            }
-
-            return this;
-        }
-
-        /// <summary>
         /// Returns the serialized size.
         /// </summary>
         /// <returns></returns>
@@ -102,18 +80,6 @@ namespace Google.Protobuf.Reflection.Dynamic
         {
             if (desc.IsRepeated)
             {
-                /*if (desc.IsPacked)
-                {
-                    int dataSize = 0;
-                    foreach (object val in (IEnumerable) value)
-                    {
-                        dataSize += ComputeElementSizeNoTag(desc.FieldType, val);
-                    }
-                    return dataSize + CodedOutputStream.ComputeTagSize(desc.FieldNumber) + CodedOutputStream.ComputeUInt32Size((uint) dataSize);
-
-                }
-                else
-                {*/
                 int dataSize = 0;
                 int tagSize = CodedOutputStream.ComputeTagSize(desc.FieldNumber);
                 foreach (object val in (IEnumerable) value)
@@ -121,7 +87,6 @@ namespace Google.Protobuf.Reflection.Dynamic
                     dataSize += ComputeElementSizeNoTag(desc.FieldType, val) + tagSize;
                 }
                 return dataSize;
-                // }
             }
             else
             {
@@ -216,27 +181,10 @@ namespace Google.Protobuf.Reflection.Dynamic
             FieldType fieldType = descriptor.FieldType;
             if (descriptor.IsRepeated)
             {
-                /*if (descriptor.IsPacked)
-                {
-                    output.WriteTag(descriptor.FieldNumber, WireFormat.WireType.LengthDelimited);
-                    int dataSize = 0;
-                    foreach (Object val in (IEnumerable) value)
-                    {
-                        dataSize += ComputeElementSizeNoTag(fieldType, val);
-                    }
-                    output.WriteUInt32((uint) dataSize);
-                    foreach (Object val in (IEnumerable) value)
-                    {
-                        WriteElementNoTag(output, fieldType, val);
-                    }
-                }
-                else
-                {*/
                 foreach (Object val in (IEnumerable) value)
                 {
                     WriteElement(output, fieldType, descriptor.FieldNumber, val);
                 }
-                //}
             }
             else
             {
