@@ -28,16 +28,19 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-#include <google/protobuf/compiler/python/pyi_generator.h>
+#include "google/protobuf/compiler/python/pyi_generator.h"
 
 #include <string>
+#include <utility>
 
-#include <google/protobuf/stubs/strutil.h>
-#include <google/protobuf/compiler/python/helpers.h>
-#include <google/protobuf/descriptor.h>
-#include <google/protobuf/descriptor.pb.h>
-#include <google/protobuf/io/printer.h>
-#include <google/protobuf/io/zero_copy_stream.h>
+#include "absl/strings/ascii.h"
+#include "absl/strings/match.h"
+#include "absl/strings/str_split.h"
+#include "google/protobuf/compiler/python/helpers.h"
+#include "google/protobuf/descriptor.h"
+#include "google/protobuf/descriptor.pb.h"
+#include "google/protobuf/io/printer.h"
+#include "google/protobuf/io/zero_copy_stream.h"
 
 namespace google {
 namespace protobuf {
@@ -56,7 +59,7 @@ std::string PyiGenerator::ModuleLevelName(const DescriptorT& descriptor) const {
     std::string filename = descriptor.file()->name();
     if (import_map_.find(filename) == import_map_.end()) {
       std::string module_name = ModuleName(descriptor.file()->name());
-      std::vector<std::string> tokens = Split(module_name, ".");
+      std::vector<std::string> tokens = absl::StrSplit(module_name, ".");
       module_alias = "_" + tokens.back();
     } else {
       module_alias = import_map_.at(filename);
@@ -151,17 +154,19 @@ void PyiGenerator::PrintImportForDescriptor(
     const FileDescriptor& desc,
     std::set<std::string>* seen_aliases) const {
   const std::string& filename = desc.name();
-  std::string module_name = StrippedModuleName(filename);
+  std::string module_name_owned = StrippedModuleName(filename);
+  absl::string_view module_name(module_name_owned);
   size_t last_dot_pos = module_name.rfind('.');
   std::string import_statement;
   if (last_dot_pos == std::string::npos) {
-    import_statement = "import " + module_name;
+    import_statement = absl::StrCat("import ", module_name);
   } else {
-    import_statement = "from " + module_name.substr(0, last_dot_pos) +
-                       " import " + module_name.substr(last_dot_pos + 1);
+    import_statement =
+        absl::StrCat("from ", module_name.substr(0, last_dot_pos), " import ",
+                     module_name.substr(last_dot_pos + 1));
     module_name = module_name.substr(last_dot_pos + 1);
   }
-  std::string alias = "_" + module_name;
+  std::string alias = absl::StrCat("_", module_name);
   // Generate a unique alias by adding _1 suffixes until we get an unused alias.
   while (seen_aliases->find(alias) != seen_aliases->end()) {
     alias = alias + "_1";
@@ -283,12 +288,21 @@ void PyiGenerator::PrintImports() const {
 printer_->Print("\n");
 }
 
+// Annotate wrapper for debugging purposes
+// Print a message after Annotate to see what is annotated.
+template <typename DescriptorT>
+void PyiGenerator::Annotate(const std::string& label,
+                            const DescriptorT* descriptor) const {
+printer_->Annotate(label.c_str(), descriptor);
+}
+
 void PyiGenerator::PrintEnum(const EnumDescriptor& enum_descriptor) const {
   std::string enum_name = enum_descriptor.name();
   printer_->Print(
       "class $enum_name$(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):\n"
       "    __slots__ = []\n",
       "enum_name", enum_name);
+  Annotate("enum_name", &enum_descriptor);
 }
 
 void PyiGenerator::PrintEnumValues(
@@ -300,6 +314,7 @@ void PyiGenerator::PrintEnumValues(
     printer_->Print("$name$: $module_enum_name$\n",
                     "name", value_descriptor->name(),
                     "module_enum_name", module_enum_name);
+    Annotate("name", value_descriptor);
   }
 }
 
@@ -315,11 +330,12 @@ void PyiGenerator::PrintExtensions(const DescriptorT& descriptor) const {
   for (int i = 0; i < descriptor.extension_count(); ++i) {
     const FieldDescriptor* extension_field = descriptor.extension(i);
     std::string constant_name = extension_field->name() + "_FIELD_NUMBER";
-    ToUpper(&constant_name);
+    absl::AsciiStrToUpper(&constant_name);
     printer_->Print("$constant_name$: _ClassVar[int]\n",
                     "constant_name", constant_name);
     printer_->Print("$name$: _descriptor.FieldDescriptor\n",
                     "name", extension_field->name());
+    Annotate("name", extension_field);
   }
 }
 
@@ -379,6 +395,7 @@ void PyiGenerator::PrintMessage(
   }
   printer_->Print("class $class_name$(_message.Message$extra_base$):\n",
                   "class_name", class_name, "extra_base", extra_base);
+  Annotate("class_name", &message_descriptor);
   printer_->Indent();
   printer_->Indent();
 
@@ -422,7 +439,7 @@ void PyiGenerator::PrintMessage(
     const FieldDescriptor& field_des = *message_descriptor.field(i);
     printer_->Print(
       "$field_number_name$: _ClassVar[int]\n", "field_number_name",
-      ToUpper(field_des.name()) + "_FIELD_NUMBER");
+      absl::AsciiStrToUpper(field_des.name()) + "_FIELD_NUMBER");
   }
   // Prints field name and type
   for (int i = 0; i < message_descriptor.field_count(); ++i) {
@@ -454,6 +471,7 @@ void PyiGenerator::PrintMessage(
     }
     printer_->Print("$name$: $type$\n",
                     "name", field_des.name(), "type", field_type);
+    Annotate("name", &field_des);
   }
 
   // Prints __init__
@@ -475,6 +493,7 @@ void PyiGenerator::PrintMessage(
     }
     is_first = false;
     printer_->Print(", $field_name$: ", "field_name", field_name);
+    Annotate("field_name", field_des);
     if (field_des->is_repeated() ||
         field_des->cpp_type() != FieldDescriptor::CPPTYPE_BOOL) {
       printer_->Print("_Optional[");
@@ -546,18 +565,39 @@ bool PyiGenerator::Generate(const FileDescriptor* file,
                             const std::string& parameter,
                             GeneratorContext* context,
                             std::string* error) const {
-  MutexLock lock(&mutex_);
+  absl::MutexLock lock(&mutex_);
   import_map_.clear();
   // Calculate file name.
   file_ = file;
   // In google3, devtools/python/blaze/pytype/pytype_impl.bzl uses --pyi_out to
   // directly set the output file name.
-  std::string filename =
-      parameter.empty() ? GetFileName(file, ".pyi") : parameter;
+  std::vector<std::pair<std::string, std::string> > options;
+  ParseGeneratorParameter(parameter, &options);
+
+  std::string filename;
+  bool annotate_code = false;
+  for (const std::pair<std::string, std::string>& option : options) {
+    if (option.first == "annotate_code") {
+      annotate_code = true;
+    } else if (absl::EndsWith(option.first, ".pyi")) {
+      filename = option.first;
+    } else {
+      *error = "Unknown generator option: " + option.first;
+      return false;
+    }
+  }
+
+  if (filename.empty()) {
+    filename = GetFileName(file, ".pyi");
+  }
 
   std::unique_ptr<io::ZeroCopyOutputStream> output(context->Open(filename));
   GOOGLE_CHECK(output.get());
-  io::Printer printer(output.get(), '$');
+  GeneratedCodeInfo annotations;
+  io::AnnotationProtoCollector<GeneratedCodeInfo> annotation_collector(
+      &annotations);
+  io::Printer printer(output.get(), '$',
+                      annotate_code ? &annotation_collector : nullptr);
   printer_ = &printer;
 
   PrintImports();

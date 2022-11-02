@@ -28,7 +28,7 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-#include <google/protobuf/generated_message_tctable_gen.h>
+#include "google/protobuf/generated_message_tctable_gen.h"
 
 #include <algorithm>
 #include <limits>
@@ -36,14 +36,14 @@
 #include <utility>
 #include <vector>
 
-#include <google/protobuf/descriptor.h>
-#include <google/protobuf/descriptor.pb.h>
-#include <google/protobuf/generated_message_tctable_decl.h>
-#include <google/protobuf/generated_message_tctable_impl.h>
-#include <google/protobuf/wire_format.h>
+#include "google/protobuf/descriptor.h"
+#include "google/protobuf/descriptor.pb.h"
+#include "google/protobuf/generated_message_tctable_decl.h"
+#include "google/protobuf/generated_message_tctable_impl.h"
+#include "google/protobuf/wire_format.h"
 
 // Must come last:
-#include <google/protobuf/port_def.inc>
+#include "google/protobuf/port_def.inc"
 
 namespace google {
 namespace protobuf {
@@ -115,9 +115,6 @@ void PopulateFastFieldEntry(const TailCallTableInfo::FieldEntryInfo& entry,
     //  - Ev for the rest
     if (cpp::HasPreservingUnknownEnumSemantics(field)) {
       name.append("V32");
-    } else if (field->is_repeated() && field->is_packed()) {
-      GOOGLE_LOG(DFATAL) << "Enum validation not handled: " << field->DebugString();
-      return;
     } else {
       int16_t start;
       uint16_t size;
@@ -148,7 +145,9 @@ void PopulateFastFieldEntry(const TailCallTableInfo::FieldEntryInfo& entry,
   }
   if (field->type() == field->TYPE_STRING ||
       field->type() == field->TYPE_BYTES) {
-    if (options.is_string_inlined) {
+    if (field->options().ctype() == FieldOptions::CORD) {
+      name.append("c");
+    } else if (options.is_string_inlined) {
       name.append("i");
       GOOGLE_CHECK(!field->is_repeated());
       aux_idx = static_cast<uint8_t>(entry.inlined_string_idx);
@@ -192,21 +191,15 @@ bool IsFieldEligibleForFastParsing(
   int aux_idx = entry.aux_idx;
 
   switch (field->type()) {
-    case FieldDescriptor::TYPE_ENUM:
-      // If enum values are not validated at parse time, then this field can be
-      // handled on the fast path like an int32.
-      if (cpp::HasPreservingUnknownEnumSemantics(field)) {
-        break;
-      }
-      if (field->is_repeated() && field->is_packed()) {
-        return false;
-      }
-      break;
-
       // Some bytes fields can be handled on fast path.
     case FieldDescriptor::TYPE_STRING:
     case FieldDescriptor::TYPE_BYTES:
-      if (field->options().ctype() != FieldOptions::STRING) {
+      if (field->options().ctype() == FieldOptions::STRING) {
+        // strings are fine...
+      } else if (field->options().ctype() == FieldOptions::CORD) {
+        // Cords are worth putting into the fast table, if they're not repeated
+        if (field->is_repeated()) return false;
+      } else {
         return false;
       }
       if (options.is_string_inlined) {
@@ -245,28 +238,42 @@ bool IsFieldEligibleForFastParsing(
   return true;
 }
 
+absl::optional<uint32_t> GetEndGroupTag(const Descriptor* descriptor) {
+  auto* parent = descriptor->containing_type();
+  if (parent == nullptr) return absl::nullopt;
+  for (int i = 0; i < parent->field_count(); ++i) {
+    auto* field = parent->field(i);
+    if (field->type() == field->TYPE_GROUP &&
+        field->message_type() == descriptor) {
+      return WireFormatLite::MakeTag(field->number(),
+                                     WireFormatLite::WIRETYPE_END_GROUP);
+    }
+  }
+  return absl::nullopt;
+}
+
+uint32_t RecodeTagForFastParsing(uint32_t tag) {
+  GOOGLE_DCHECK_LE(tag, 0x3FFF);
+  // Construct the varint-coded tag. If it is more than 7 bits, we need to
+  // shift the high bits and add a continue bit.
+  if (uint32_t hibits = tag & 0xFFFFFF80) {
+    // hi = tag & ~0x7F
+    // lo = tag & 0x7F
+    // This shifts hi to the left by 1 to the next byte and sets the
+    // continuation bit.
+    tag = tag + hibits + 128;
+  }
+  return tag;
+}
+
 std::vector<TailCallTableInfo::FastFieldInfo> SplitFastFieldsForSize(
+    absl::optional<uint32_t> end_group_tag,
     const std::vector<TailCallTableInfo::FieldEntryInfo>& field_entries,
     int table_size_log2,
     const TailCallTableInfo::OptionProvider& option_provider) {
   std::vector<TailCallTableInfo::FastFieldInfo> result(1 << table_size_log2);
   const uint32_t idx_mask = static_cast<uint32_t>(result.size() - 1);
-
-  for (const auto& entry : field_entries) {
-    if (!IsFieldEligibleForFastParsing(entry, option_provider)) {
-      continue;
-    }
-
-    const auto* field = entry.field;
-    const auto options = option_provider.GetForField(field);
-    uint32_t tag = WireFormat::MakeTag(field);
-
-    // Construct the varint-coded tag. If it is more than 7 bits, we need to
-    // shift the high bits and add a continue bit.
-    if (uint32_t hibits = tag & 0xFFFFFF80) {
-      tag = tag + hibits + 128;  // tag = lobits + 2*hibits + 128
-    }
-
+  const auto tag_to_idx = [&](uint32_t tag) {
     // The field index is determined by the low bits of the field number, where
     // the table size determines the width of the mask. The largest table
     // supported is 32 entries. The parse loop uses these bits directly, so that
@@ -277,10 +284,33 @@ std::vector<TailCallTableInfo::FastFieldInfo> SplitFastFieldsForSize(
     //         idx (table_size_log2=5)
     // This means that any field number that does not fit in the lower 4 bits
     // will always have the top bit of its table index asserted.
-    const uint32_t fast_idx = (tag >> 3) & idx_mask;
+    return (tag >> 3) & idx_mask;
+  };
+
+  if (end_group_tag.has_value() && (*end_group_tag >> 14) == 0) {
+    // Fits in 1 or 2 varint bytes.
+    const uint32_t tag = RecodeTagForFastParsing(*end_group_tag);
+    const uint32_t fast_idx = tag_to_idx(tag);
 
     TailCallTableInfo::FastFieldInfo& info = result[fast_idx];
-    if (info.field != nullptr) {
+    info.func_name = "::_pbi::TcParser::FastEndG";
+    info.func_name.append(*end_group_tag < 128 ? "1" : "2");
+    info.coded_tag = tag;
+    info.nonfield_info = *end_group_tag;
+  }
+
+  for (const auto& entry : field_entries) {
+    if (!IsFieldEligibleForFastParsing(entry, option_provider)) {
+      continue;
+    }
+
+    const auto* field = entry.field;
+    const auto options = option_provider.GetForField(field);
+    const uint32_t tag = RecodeTagForFastParsing(WireFormat::MakeTag(field));
+    const uint32_t fast_idx = tag_to_idx(tag);
+
+    TailCallTableInfo::FastFieldInfo& info = result[fast_idx];
+    if (!info.func_name.empty()) {
       // This field entry is already filled.
       continue;
     }
@@ -322,23 +352,10 @@ std::vector<const FieldDescriptor*> FilterMiniParsedFields(
       case FieldDescriptor::TYPE_UINT64:
       case FieldDescriptor::TYPE_SINT64:
       case FieldDescriptor::TYPE_INT64:
+      case FieldDescriptor::TYPE_ENUM:
         // These are handled by MiniParse, so we don't need any generated
         // fallback code.
         handled = true;
-        break;
-
-      case FieldDescriptor::TYPE_ENUM:
-        if (field->is_repeated() &&
-            !cpp::HasPreservingUnknownEnumSemantics(field)) {
-          // TODO(b/206890171): handle packed repeated closed enums
-          // Non-packed repeated can be handled using tables, but we still
-          // need to generate fallback code for all repeated enums in order to
-          // handle packed encoding. This is because of the lite/full split
-          // when handling invalid enum values in a packed field.
-          handled = false;
-        } else {
-          handled = true;
-        }
         break;
 
       case FieldDescriptor::TYPE_BYTES:
@@ -354,8 +371,7 @@ std::vector<const FieldDescriptor*> FilterMiniParsedFields(
       case FieldDescriptor::TYPE_MESSAGE:
       case FieldDescriptor::TYPE_GROUP:
         // TODO(b/210762816): support remaining field types.
-        if (field->is_map() || field->options().weak() ||
-            options.is_implicitly_weak || options.is_lazy) {
+        if (field->is_map() || field->options().weak() || options.is_lazy) {
           handled = false;
         } else {
           handled = true;
@@ -372,18 +388,49 @@ std::vector<const FieldDescriptor*> FilterMiniParsedFields(
   return generated_fallback_fields;
 }
 
+// We only need field names for reporting UTF-8 parsing errors, so we only
+// emit them for string fields with Utf8 transform specified.
+absl::string_view FieldNameForTable(
+    const TailCallTableInfo::FieldEntryInfo& entry) {
+  const auto* field = entry.field;
+  if (field->type() == FieldDescriptor::TYPE_STRING) {
+    const uint16_t xform_val = entry.type_card & field_layout::kTvMask;
+
+    switch (xform_val) {
+      case field_layout::kTvUtf8:
+      case field_layout::kTvUtf8Debug:
+        return field->name();
+    }
+  }
+  return "";
+}
+
 std::vector<uint8_t> GenerateFieldNames(
     const Descriptor* descriptor,
-    const std::vector<const FieldDescriptor*>& fields) {
+    const std::vector<TailCallTableInfo::FieldEntryInfo>& entries) {
   static constexpr int kMaxNameLength = 255;
   std::vector<uint8_t> out;
+
+  bool found_needed_name = false;
+  for (const auto& entry : entries) {
+    if (!FieldNameForTable(entry).empty()) {
+      found_needed_name = true;
+      break;
+    }
+  }
+
+  // No names needed. Omit the whole table.
+  if (!found_needed_name) {
+    return out;
+  }
+
   // First, we output the size of each string, as an unsigned byte. The first
   // string is the message name.
   int count = 1;
   out.push_back(std::min(static_cast<int>(descriptor->full_name().size()),
                          kMaxNameLength));
-  for (const auto* field : fields) {
-    out.push_back(field->name().size());
+  for (const auto& entry : entries) {
+    out.push_back(FieldNameForTable(entry).size());
     ++count;
   }
   while (count & 7) {  // align to an 8-byte boundary
@@ -394,14 +441,15 @@ std::vector<uint8_t> GenerateFieldNames(
   std::string message_name = descriptor->full_name();
   if (message_name.size() > kMaxNameLength) {
     static constexpr int kNameHalfLength = (kMaxNameLength - 3) / 2;
-    message_name = StrCat(
+    message_name = absl::StrCat(
         message_name.substr(0, kNameHalfLength), "...",
         message_name.substr(message_name.size() - kNameHalfLength));
   }
   out.insert(out.end(), message_name.begin(), message_name.end());
   // Then we output the actual field names
-  for (const auto* field : fields) {
-    out.insert(out.end(), field->name().begin(), field->name().end());
+  for (const auto& entry : entries) {
+    const auto& field_name = FieldNameForTable(entry);
+    out.insert(out.end(), field_name.begin(), field_name.end());
   }
 
   return out;
@@ -590,7 +638,9 @@ uint16_t MakeTypeCardForField(
 
     case FieldDescriptor::TYPE_GROUP:
       type_card |= 0 | fl::kMessage | fl::kRepGroup;
-      if (options.use_direct_tcparser_table) {
+      if (options.is_implicitly_weak) {
+        type_card |= fl::kTvWeakPtr;
+      } else if (options.use_direct_tcparser_table) {
         type_card |= fl::kTvTable;
       } else {
         type_card |= fl::kTvDefault;
@@ -603,11 +653,11 @@ uint16_t MakeTypeCardForField(
         type_card |= fl::kMessage;
         if (options.is_lazy) {
           type_card |= fl::kRepLazy;
-        } else if (options.is_implicitly_weak) {
-          type_card |= fl::kRepIWeak;
         }
 
-        if (options.use_direct_tcparser_table) {
+        if (options.is_implicitly_weak) {
+          type_card |= fl::kTvWeakPtr;
+        } else if (options.use_direct_tcparser_table) {
           type_card |= fl::kTvTable;
         } else {
           type_card |= fl::kTvDefault;
@@ -642,19 +692,21 @@ TailCallTableInfo::TailCallTableInfo(
     const std::vector<int>& has_bit_indices,
     const std::vector<int>& inlined_string_indices) {
   // If this message has any inlined string fields, store the donation state
-  // offset in the second auxiliary entry.
+  // offset in the first auxiliary entry, which is kInlinedStringAuxIdx.
   if (!inlined_string_indices.empty()) {
-    aux_entries.resize(1);  // pad if necessary
-    aux_entries[0] = {kInlinedStringDonatedOffset};
+    aux_entries.resize(kInlinedStringAuxIdx + 1);  // Allocate our slot
+    aux_entries[kInlinedStringAuxIdx] = {kInlinedStringDonatedOffset};
   }
 
-  // If this message is split, store the split pointer offset in the third
-  // auxiliary entry.
+  // If this message is split, store the split pointer offset in the second
+  // and third auxiliary entries, which are kSplitOffsetAuxIdx and
+  // kSplitSizeAuxIdx.
   for (auto* field : ordered_fields) {
     if (option_provider.GetForField(field).should_split) {
-      aux_entries.resize(3);  // pad if necessary
-      aux_entries[1] = {kSplitOffset};
-      aux_entries[2] = {kSplitSizeof};
+      static_assert(kSplitOffsetAuxIdx + 1 == kSplitSizeAuxIdx, "");
+      aux_entries.resize(kSplitSizeAuxIdx + 1);  // Allocate our 2 slots
+      aux_entries[kSplitOffsetAuxIdx] = {kSplitOffset};
+      aux_entries[kSplitSizeAuxIdx] = {kSplitSizeof};
       break;
     }
   }
@@ -677,15 +729,15 @@ TailCallTableInfo::TailCallTableInfo(
       } else if (field->options().weak()) {
         // Don't generate anything for weak fields. They are handled by the
         // generated fallback.
-      } else if (options.is_implicitly_weak) {
-        // Implicit weak fields don't need to store a default instance pointer.
       } else if (options.is_lazy) {
         // Lazy fields are handled by the generated fallback function.
       } else {
         field_entries.back().aux_idx = aux_entries.size();
-        aux_entries.push_back(
-            {options.use_direct_tcparser_table ? kSubTable : kSubMessage,
-             {field}});
+        aux_entries.push_back({options.is_implicitly_weak ? kSubMessageWeak
+                               : options.use_direct_tcparser_table
+                                   ? kSubTable
+                                   : kSubMessage,
+                               {field}});
       }
     } else if (field->type() == FieldDescriptor::TYPE_ENUM &&
                !cpp::HasPreservingUnknownEnumSemantics(field)) {
@@ -731,10 +783,11 @@ TailCallTableInfo::TailCallTableInfo(
 
   table_size_log2 = 0;  // fallback value
   int num_fast_fields = -1;
+  auto end_group_tag = GetEndGroupTag(descriptor);
   for (int try_size_log2 : {0, 1, 2, 3, 4, 5}) {
     size_t try_size = 1 << try_size_log2;
-    auto split_fields =
-        SplitFastFieldsForSize(field_entries, try_size_log2, option_provider);
+    auto split_fields = SplitFastFieldsForSize(end_group_tag, field_entries,
+                                               try_size_log2, option_provider);
     GOOGLE_CHECK_EQ(split_fields.size(), try_size);
     int try_num_fast_fields = 0;
     for (const auto& info : split_fields) {
@@ -752,8 +805,17 @@ TailCallTableInfo::TailCallTableInfo(
     // cover more fields in certain cases, but a larger table in that case
     // would have mostly empty entries; so, we cap the size to avoid
     // pathologically sparse tables.
-    if (try_size > ordered_fields.size()) {
-      break;
+    if (end_group_tag.has_value()) {
+      // If this message uses group encoding, the tables are sometimes very
+      // sparse because the fields in the group avoid using the same field
+      // numbering as the parent message (even though currently, the proto
+      // compiler allows the overlap, and there is no possible conflict.)
+      // As such, this test produces a false negative as far as whether the
+      // large table will be worth it.  So we disable the test in this case.
+    } else {
+      if (try_size > ordered_fields.size()) {
+        break;
+      }
     }
   }
 
@@ -763,7 +825,8 @@ TailCallTableInfo::TailCallTableInfo(
   );
 
   num_to_entry_table = MakeNumToEntryTable(ordered_fields);
-  field_name_data = GenerateFieldNames(descriptor, ordered_fields);
+  GOOGLE_CHECK_EQ(field_entries.size(), ordered_fields.size());
+  field_name_data = GenerateFieldNames(descriptor, field_entries);
 
   // If there are no fallback fields, and at most one extension range, the
   // parser can use a generic fallback function. Otherwise, a message-specific
@@ -776,4 +839,4 @@ TailCallTableInfo::TailCallTableInfo(
 }  // namespace protobuf
 }  // namespace google
 
-#include <google/protobuf/port_undef.inc>
+#include "google/protobuf/port_undef.inc"

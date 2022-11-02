@@ -116,20 +116,24 @@
 #include <type_traits>
 #include <vector>
 
-#include <google/protobuf/stubs/casts.h>
-#include <google/protobuf/stubs/common.h>
-#include <google/protobuf/arena.h>
-#include <google/protobuf/port.h>
-#include <google/protobuf/descriptor.h>
-#include <google/protobuf/generated_message_reflection.h>
-#include <google/protobuf/generated_message_tctable_decl.h>
-#include <google/protobuf/generated_message_util.h>
-#include <google/protobuf/map.h>  // TODO(b/211442718): cleanup
-#include <google/protobuf/message_lite.h>
+#include "google/protobuf/stubs/common.h"
+#include "google/protobuf/arena.h"
+#include "google/protobuf/port.h"
+#include "absl/base/call_once.h"
+#include "absl/base/casts.h"
+#include "absl/functional/function_ref.h"
+#include "absl/strings/string_view.h"
+#include "google/protobuf/descriptor.h"
+#include "google/protobuf/generated_message_reflection.h"
+#include "google/protobuf/generated_message_tctable_decl.h"
+#include "google/protobuf/generated_message_util.h"
+#include "google/protobuf/map.h"  // TODO(b/211442718): cleanup
+#include "google/protobuf/message_lite.h"
+#include "google/protobuf/port.h"
 
 
 // Must be included last.
-#include <google/protobuf/port_def.inc>
+#include "google/protobuf/port_def.inc"
 
 #ifdef SWIG
 #error "You cannot SWIG proto headers"
@@ -154,6 +158,7 @@ class MapIterator;
 class MapReflectionTester;
 
 namespace internal {
+struct FuzzPeer;
 struct DescriptorTable;
 class MapFieldBase;
 class SwapFieldHelper;
@@ -177,7 +182,10 @@ class CelMapReflectionFriend;  // field_backed_map_impl.cc
 
 namespace internal {
 class MapFieldPrinterHelper;  // text_format.cc
-}
+void PerformAbslStringify(
+    const Message& message,
+    absl::FunctionRef<void(absl::string_view)> append);  // text_format.cc
+}  // namespace internal
 namespace util {
 class MessageDifferencer;
 }
@@ -242,6 +250,8 @@ PROTOBUF_EXPORT bool IsDescendant(Message& root, const Message& message);
 class PROTOBUF_EXPORT Message : public MessageLite {
  public:
   constexpr Message() {}
+  Message(const Message&) = delete;
+  Message& operator=(const Message&) = delete;
 
   // Basic Operations ------------------------------------------------
 
@@ -323,6 +333,15 @@ class PROTOBUF_EXPORT Message : public MessageLite {
   std::string Utf8DebugString() const;
   // Convenience function useful in GDB.  Prints DebugString() to stdout.
   void PrintDebugString() const;
+
+  // Implementation of the `AbslStringify` interface. This adds something
+  // similar to either `ShortDebugString()` or `DebugString()` to the sink.
+  // Do not rely on exact format.
+  template <typename Sink>
+  friend void AbslStringify(Sink& sink, const google::protobuf::Message& message) {
+    internal::PerformAbslStringify(
+        message, [&](absl::string_view content) { sink.Append(content); });
+  }
 
   // Reflection-based methods ----------------------------------------
   // These methods are pure-virtual in MessageLite, but Message provides
@@ -406,9 +425,6 @@ class PROTOBUF_EXPORT Message : public MessageLite {
 
  protected:
   static uint64_t GetInvariantPerBuild(uint64_t salt);
-
- private:
-  GOOGLE_DISALLOW_EVIL_CONSTRUCTORS(Message);
 };
 
 namespace internal {
@@ -470,6 +486,8 @@ class MutableRepeatedFieldRef;
 // memory leaks.  So, instead we ended up with this flat interface.
 class PROTOBUF_EXPORT Reflection final {
  public:
+  Reflection(const Reflection&) = delete;
+  Reflection& operator=(const Reflection&) = delete;
   ~Reflection();
 
   // Get the UnknownFieldSet for the message.  This contains fields which
@@ -791,6 +809,7 @@ class PROTOBUF_EXPORT Reflection final {
                  std::string value) const;
   void AddEnum(Message* message, const FieldDescriptor* field,
                const EnumValueDescriptor* value) const;
+
   // Add an integer value to a repeated enum field rather than
   // EnumValueDescriptor. For proto3 this is just setting the enum field to the
   // value specified, for proto2 it's more complicated. If value is a known enum
@@ -910,8 +929,7 @@ class PROTOBUF_EXPORT Reflection final {
 
   // Try to find an extension of this message type by fully-qualified field
   // name.  Returns nullptr if no extension is known for this name or number.
-  const FieldDescriptor* FindKnownExtensionByName(
-      const std::string& name) const;
+  const FieldDescriptor* FindKnownExtensionByName(absl::string_view name) const;
 
   // Try to find an extension of this message type by field number.
   // Returns nullptr if no extension is known for this name or number.
@@ -973,6 +991,7 @@ class PROTOBUF_EXPORT Reflection final {
   template <typename T>
   RepeatedPtrField<T>* MutableRepeatedPtrFieldInternal(
       Message* message, const FieldDescriptor* field) const;
+
   // Obtain a pointer to a Repeated Field Structure and do some type checking:
   //   on field->cpp_type(),
   //   on field->field_option().ctype() (if ctype >= 0)
@@ -1068,13 +1087,13 @@ class PROTOBUF_EXPORT Reflection final {
   // The table-driven parser table.
   // This table is generated on demand for Message types that did not override
   // _InternalParse. It uses the reflection information to do so.
-  mutable internal::once_flag tcparse_table_once_;
+  mutable absl::once_flag tcparse_table_once_;
   using TcParseTableBase = internal::TcParseTableBase;
   mutable const TcParseTableBase* tcparse_table_ = nullptr;
 
   const TcParseTableBase* GetTcParseTable() const {
-    internal::call_once(tcparse_table_once_,
-                        [&] { tcparse_table_ = CreateTcParseTable(); });
+    absl::call_once(tcparse_table_once_,
+                    [&] { tcparse_table_ = CreateTcParseTable(); });
     return tcparse_table_;
   }
 
@@ -1107,6 +1126,7 @@ class PROTOBUF_EXPORT Reflection final {
   friend class internal::WireFormat;
   friend class internal::ReflectionOps;
   friend class internal::SwapFieldHelper;
+  friend struct internal::FuzzPeer;
   // Needed for implementing text format for map.
   friend class internal::MapFieldPrinterHelper;
 
@@ -1317,8 +1337,6 @@ class PROTOBUF_EXPORT Reflection final {
                                              const Reflection* reflection,
                                              const char* ptr,
                                              internal::ParseContext* ctx);
-
-  GOOGLE_DISALLOW_EVIL_CONSTRUCTORS(Reflection);
 };
 
 // Abstract interface for a factory for message objects.
@@ -1328,6 +1346,8 @@ class PROTOBUF_EXPORT Reflection final {
 class PROTOBUF_EXPORT MessageFactory {
  public:
   inline MessageFactory() {}
+  MessageFactory(const MessageFactory&) = delete;
+  MessageFactory& operator=(const MessageFactory&) = delete;
   virtual ~MessageFactory();
 
   // Given a Descriptor, gets or constructs the default (prototype) Message
@@ -1383,9 +1403,6 @@ class PROTOBUF_EXPORT MessageFactory {
   static void InternalRegisterGeneratedMessage(const Descriptor* descriptor,
                                                const Message* prototype);
 
-
- private:
-  GOOGLE_DISALLOW_EVIL_CONSTRUCTORS(MessageFactory);
 };
 
 #define DECLARE_GET_REPEATED_FIELD(TYPE)                           \
@@ -1432,7 +1449,7 @@ const T* DynamicCastToGenerated(const Message* from) {
 #else
   bool ok = from != nullptr &&
             T::default_instance().GetReflection() == from->GetReflection();
-  return ok ? down_cast<const T*>(from) : nullptr;
+  return ok ? internal::DownCast<const T*>(from) : nullptr;
 #endif
 }
 
@@ -1567,6 +1584,6 @@ const Type& Reflection::GetRaw(const Message& message,
 }  // namespace protobuf
 }  // namespace google
 
-#include <google/protobuf/port_undef.inc>
+#include "google/protobuf/port_undef.inc"
 
 #endif  // GOOGLE_PROTOBUF_MESSAGE_H__

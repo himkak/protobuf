@@ -83,7 +83,6 @@ public abstract class AbstractMessage
     throw new UnsupportedOperationException("Nested builder is not supported for this type.");
   }
 
-
   @Override
   public List<String> findInitializationErrors() {
     return MessageReflection.findMissingFields(this);
@@ -424,25 +423,20 @@ public abstract class AbstractMessage
         throws IOException {
       boolean discardUnknown = input.shouldDiscardUnknownFields();
       final UnknownFieldSet.Builder unknownFields =
-          discardUnknown ? null : UnknownFieldSet.newBuilder(getUnknownFields());
-      while (true) {
-        final int tag = input.readTag();
-        if (tag == 0) {
-          break;
-        }
-
-        MessageReflection.BuilderAdapter builderAdapter =
-            new MessageReflection.BuilderAdapter(this);
-        if (!MessageReflection.mergeFieldFrom(
-            input, unknownFields, extensionRegistry, getDescriptorForType(), builderAdapter, tag)) {
-          // end group tag
-          break;
-        }
-      }
+          discardUnknown ? null : getUnknownFieldSetBuilder();
+      MessageReflection.mergeMessageFrom(this, unknownFields, input, extensionRegistry);
       if (unknownFields != null) {
-        setUnknownFields(unknownFields.build());
+        setUnknownFieldSetBuilder(unknownFields);
       }
       return (BuilderType) this;
+    }
+
+    protected UnknownFieldSet.Builder getUnknownFieldSetBuilder() {
+      return UnknownFieldSet.newBuilder(getUnknownFields());
+    }
+
+    protected void setUnknownFieldSetBuilder(final UnknownFieldSet.Builder builder) {
+      setUnknownFields(builder.build());
     }
 
     @Override
@@ -576,7 +570,7 @@ public abstract class AbstractMessage
   protected static int hashLong(long n) {
     return (int) (n ^ (n >>> 32));
   }
-  //
+
   /**
    * @deprecated from v3.0.0-beta-3+, for compatibility with v2.5.0 and v2.6.1
    * generated code.
@@ -585,7 +579,7 @@ public abstract class AbstractMessage
   protected static int hashBoolean(boolean b) {
     return b ? 1231 : 1237;
   }
-  //
+
   /**
    * @deprecated from v3.0.0-beta-3+, for compatibility with v2.5.0 and v2.6.1
    * generated code.
@@ -594,7 +588,7 @@ public abstract class AbstractMessage
   protected static int hashEnum(EnumLite e) {
     return e.getNumber();
   }
-  //
+
   /**
    * @deprecated from v3.0.0-beta-3+, for compatibility with v2.5.0 and v2.6.1
    * generated code.

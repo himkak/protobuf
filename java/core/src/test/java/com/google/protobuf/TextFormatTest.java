@@ -724,7 +724,6 @@ public class TextFormatTest {
     assertThat(actual).isEqualTo(expected);
   }
 
-
   @Test
   public void testMergeAny_customBuiltTypeRegistry() throws Exception {
     TestAny.Builder builder = TestAny.newBuilder();
@@ -758,7 +757,6 @@ public class TextFormatTest {
                         .build())
                 .build());
   }
-
 
   private void assertParseError(String error, String text) {
     // Test merge().
@@ -1399,7 +1397,6 @@ public class TextFormatTest {
         .isEqualTo("1: \"\\343\\201\\202\"\n");
   }
 
-
   @Test
   public void testParseUnknownExtensions() throws Exception {
     TestUtil.TestLogHandler logHandler = new TestUtil.TestLogHandler();
@@ -1773,6 +1770,7 @@ public class TextFormatTest {
     }
   }
 
+  @SuppressWarnings("LenientFormatStringValidation")
   private void assertLocation(
       TextFormatParseInfoTree tree,
       final Descriptor descriptor,
@@ -1786,6 +1784,7 @@ public class TextFormatTest {
       TextFormatParseLocation expected = TextFormatParseLocation.create(line, column);
       assertThat(location).isEqualTo(expected);
     } else if (line != -1 && column != -1) {
+      // Expected 0 args, but got 3.
       assertWithMessage(
               "Tree/descriptor/fieldname did not contain index %d, line %d column %d expected",
               index, line, column)
@@ -1842,5 +1841,4 @@ public class TextFormatTest {
     assertThat(TextFormat.printer().printToString(message))
         .isEqualTo("optional_float: -0.0\noptional_double: -0.0\n");
   }
-
 }

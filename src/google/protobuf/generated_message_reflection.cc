@@ -32,7 +32,7 @@
 //  Based on original Protocol Buffers design by
 //  Sanjay Ghemawat, Jeff Dean, and others.
 
-#include <google/protobuf/generated_message_reflection.h>
+#include "google/protobuf/generated_message_reflection.h"
 
 #include <algorithm>
 #include <atomic>
@@ -40,28 +40,28 @@
 #include <cstring>
 #include <set>
 #include <string>
-#include <unordered_map>
 
-#include <google/protobuf/stubs/logging.h>
-#include <google/protobuf/stubs/common.h>
-#include <google/protobuf/stubs/mutex.h>
-#include <google/protobuf/stubs/casts.h>
-#include <google/protobuf/stubs/strutil.h>
-#include <google/protobuf/descriptor.h>
-#include <google/protobuf/descriptor.pb.h>
-#include <google/protobuf/extension_set.h>
-#include <google/protobuf/generated_message_tctable_gen.h>
-#include <google/protobuf/generated_message_tctable_impl.h>
-#include <google/protobuf/generated_message_util.h>
-#include <google/protobuf/inlined_string_field.h>
-#include <google/protobuf/map_field.h>
-#include <google/protobuf/map_field_inl.h>
-#include <google/protobuf/repeated_field.h>
-#include <google/protobuf/unknown_field_set.h>
+#include "google/protobuf/stubs/logging.h"
+#include "google/protobuf/stubs/common.h"
+#include "absl/base/casts.h"
+#include "absl/container/flat_hash_map.h"
+#include "absl/strings/string_view.h"
+#include "absl/synchronization/mutex.h"
+#include "google/protobuf/descriptor.h"
+#include "google/protobuf/descriptor.pb.h"
+#include "google/protobuf/extension_set.h"
+#include "google/protobuf/generated_message_tctable_gen.h"
+#include "google/protobuf/generated_message_tctable_impl.h"
+#include "google/protobuf/generated_message_util.h"
+#include "google/protobuf/inlined_string_field.h"
+#include "google/protobuf/map_field.h"
+#include "google/protobuf/map_field_inl.h"
+#include "google/protobuf/repeated_field.h"
+#include "google/protobuf/unknown_field_set.h"
 
 
 // clang-format off
-#include <google/protobuf/port_def.inc>
+#include "google/protobuf/port_def.inc"
 // clang-format on
 
 #define GOOGLE_PROTOBUF_HAS_ONEOF
@@ -80,7 +80,6 @@ using google::protobuf::internal::OnShutdownDelete;
 using google::protobuf::internal::ReflectionSchema;
 using google::protobuf::internal::RepeatedPtrFieldBase;
 using google::protobuf::internal::StringSpaceUsedExcludingSelfLong;
-using google::protobuf::internal::WrappedMutex;
 
 namespace google {
 namespace protobuf {
@@ -102,7 +101,7 @@ Message* MaybeForceCopy(Arena* arena, Message* msg) {
 
 namespace internal {
 
-bool ParseNamedEnum(const EnumDescriptor* descriptor, ConstStringParam name,
+bool ParseNamedEnum(const EnumDescriptor* descriptor, absl::string_view name,
                     int* value) {
   const EnumValueDescriptor* d = descriptor->FindValueByName(name);
   if (d == nullptr) return false;
@@ -140,7 +139,8 @@ const std::string** MakeDenseEnumCache(const EnumDescriptor* desc, int min_val,
   return str_ptrs;
 }
 
-const std::string& NameOfDenseEnumSlow(int v, DenseEnumCacheInfo* deci) {
+PROTOBUF_NOINLINE const std::string& NameOfDenseEnumSlow(
+    int v, DenseEnumCacheInfo* deci) {
   if (v < deci->min_val || v > deci->max_val)
     return GetEmptyStringAlreadyInited();
 
@@ -2491,7 +2491,7 @@ int Reflection::MapSize(const Message& message,
 // -----------------------------------------------------------------------------
 
 const FieldDescriptor* Reflection::FindKnownExtensionByName(
-    const std::string& name) const {
+    absl::string_view name) const {
   if (!schema_.HasExtensionSet()) return nullptr;
   return descriptor_pool_->FindExtensionByPrintableName(descriptor_, name);
 }
@@ -2978,12 +2978,12 @@ static uint32_t AlignTo(uint32_t v) {
 }
 
 static internal::TailCallParseFunc GetFastParseFunction(
-    const std::string& name) {
+    absl::string_view name) {
   // This list must be synchronized with TcParser.
   // Missing entries are replaced with MiniParse in opt mode to avoid runtime
   // failures. It check-fails in debug mode.
   static const auto* const map =
-      new std::unordered_map<std::string, internal::TailCallParseFunc>{
+      new absl::flat_hash_map<absl::string_view, internal::TailCallParseFunc>{
           {"::_pbi::TcParser::FastF32S1", internal::TcParser::FastF32S1},
           {"::_pbi::TcParser::FastF32S2", internal::TcParser::FastF32S2},
           {"::_pbi::TcParser::FastF32R1", internal::TcParser::FastF32R1},
@@ -3030,18 +3030,26 @@ static internal::TailCallParseFunc GetFastParseFunction(
           {"::_pbi::TcParser::FastErS2", internal::TcParser::FastErS2},
           {"::_pbi::TcParser::FastErR1", internal::TcParser::FastErR1},
           {"::_pbi::TcParser::FastErR2", internal::TcParser::FastErR2},
+          {"::_pbi::TcParser::FastErP1", internal::TcParser::FastErP1},
+          {"::_pbi::TcParser::FastErP2", internal::TcParser::FastErP2},
           {"::_pbi::TcParser::FastEr0S1", internal::TcParser::FastEr0S1},
           {"::_pbi::TcParser::FastEr0S2", internal::TcParser::FastEr0S2},
           {"::_pbi::TcParser::FastEr0R1", internal::TcParser::FastEr0R1},
           {"::_pbi::TcParser::FastEr0R2", internal::TcParser::FastEr0R2},
+          {"::_pbi::TcParser::FastEr0P1", internal::TcParser::FastEr0P1},
+          {"::_pbi::TcParser::FastEr0P2", internal::TcParser::FastEr0P2},
           {"::_pbi::TcParser::FastEr1S1", internal::TcParser::FastEr1S1},
           {"::_pbi::TcParser::FastEr1S2", internal::TcParser::FastEr1S2},
           {"::_pbi::TcParser::FastEr1R1", internal::TcParser::FastEr1R1},
           {"::_pbi::TcParser::FastEr1R2", internal::TcParser::FastEr1R2},
+          {"::_pbi::TcParser::FastEr1P1", internal::TcParser::FastEr1P1},
+          {"::_pbi::TcParser::FastEr1P2", internal::TcParser::FastEr1P2},
           {"::_pbi::TcParser::FastEvS1", internal::TcParser::FastEvS1},
           {"::_pbi::TcParser::FastEvS2", internal::TcParser::FastEvS2},
           {"::_pbi::TcParser::FastEvR1", internal::TcParser::FastEvR1},
           {"::_pbi::TcParser::FastEvR2", internal::TcParser::FastEvR2},
+          {"::_pbi::TcParser::FastEvP1", internal::TcParser::FastEvP1},
+          {"::_pbi::TcParser::FastEvP2", internal::TcParser::FastEvP2},
           {"::_pbi::TcParser::FastBS1", internal::TcParser::FastBS1},
           {"::_pbi::TcParser::FastBS2", internal::TcParser::FastBS2},
           {"::_pbi::TcParser::FastBR1", internal::TcParser::FastBR1},
@@ -3060,6 +3068,12 @@ static internal::TailCallParseFunc GetFastParseFunction(
           {"::_pbi::TcParser::FastSiS2", internal::TcParser::FastSiS2},
           {"::_pbi::TcParser::FastUiS1", internal::TcParser::FastUiS1},
           {"::_pbi::TcParser::FastUiS2", internal::TcParser::FastUiS2},
+          {"::_pbi::TcParser::FastBcS1", internal::TcParser::FastBcS1},
+          {"::_pbi::TcParser::FastBcS2", internal::TcParser::FastBcS2},
+          {"::_pbi::TcParser::FastScS1", internal::TcParser::FastScS1},
+          {"::_pbi::TcParser::FastScS2", internal::TcParser::FastScS2},
+          {"::_pbi::TcParser::FastUcS1", internal::TcParser::FastUcS1},
+          {"::_pbi::TcParser::FastUcS2", internal::TcParser::FastUcS2},
           {"::_pbi::TcParser::FastMdS1", internal::TcParser::FastMdS1},
           {"::_pbi::TcParser::FastMdS2", internal::TcParser::FastMdS2},
           {"::_pbi::TcParser::FastGdS1", internal::TcParser::FastGdS1},
@@ -3076,6 +3090,8 @@ static internal::TailCallParseFunc GetFastParseFunction(
           {"::_pbi::TcParser::FastMtR2", internal::TcParser::FastMtR2},
           {"::_pbi::TcParser::FastGtR1", internal::TcParser::FastGtR1},
           {"::_pbi::TcParser::FastGtR2", internal::TcParser::FastGtR2},
+          {"::_pbi::TcParser::FastEndG1", internal::TcParser::FastEndG1},
+          {"::_pbi::TcParser::FastEndG2", internal::TcParser::FastEndG2},
       };
   auto it = map->find(name);
   if (it == map->end()) {
@@ -3093,7 +3109,7 @@ const internal::TcParseTableBase* Reflection::CreateTcParseTableForMessageSet()
   // Create a dummy table that only exists to make TcParser::ParseLoop jump
   // into the reflective parse loop.
 
-  using Table = internal::TcParseTable<0, 0, 0, 1, 1>;
+  using Table = internal::TcParseTable<0, 0, 0, 0, 1>;
   // We use `operator new` here because the destruction will be done with
   // `operator delete` unconditionally.
   void* p = ::operator new(sizeof(Table));
@@ -3110,8 +3126,14 @@ void Reflection::PopulateTcParseFastEntries(
     TcParseTableBase::FastFieldEntry* fast_entries) const {
   for (const auto& fast_field : table_info.fast_path_fields) {
     if (fast_field.field == nullptr) {
-      // No fast entry here. Use mini parser.
-      *fast_entries++ = {internal::TcParser::MiniParse, {}};
+      if (fast_field.func_name.empty()) {
+        // No fast entry here. Use mini parser.
+        *fast_entries++ = {internal::TcParser::MiniParse, {}};
+      } else {
+        // No field, but still a special entry.
+        *fast_entries++ = {GetFastParseFunction(fast_field.func_name),
+                           {fast_field.coded_tag, fast_field.nonfield_info}};
+      }
     } else if (fast_field.func_name.find("TcParser::FastEv") !=
                fast_field.func_name.npos) {
       // We can't use fast parsing for these entries because we can't specify
@@ -3195,6 +3217,7 @@ void Reflection::PopulateTcParseFieldAux(
         field_aux++->offset = schema_.SizeofSplit();
         break;
       case internal::TailCallTableInfo::kSubTable:
+      case internal::TailCallTableInfo::kSubMessageWeak:
         GOOGLE_LOG(FATAL) << "Not supported";
         break;
       case internal::TailCallTableInfo::kSubMessage:
@@ -3311,8 +3334,10 @@ const internal::TcParseTableBase* Reflection::CreateTcParseTable() const {
   PopulateTcParseFieldAux(table_info, res->field_aux(0u));
 
   // Copy the name data.
-  memcpy(res->name_data(), table_info.field_name_data.data(),
-         table_info.field_name_data.size());
+  if (!table_info.field_name_data.empty()) {
+    memcpy(res->name_data(), table_info.field_name_data.data(),
+           table_info.field_name_data.size());
+  }
   // Validation to make sure we used all the bytes correctly.
   GOOGLE_CHECK_EQ(res->name_data() + table_info.field_name_data.size() -
                reinterpret_cast<char*>(res),
@@ -3431,7 +3456,7 @@ struct MetadataOwner {
  private:
   MetadataOwner() = default;  // private because singleton
 
-  WrappedMutex mu_;
+  absl::Mutex mu_;
   std::vector<std::pair<const Metadata*, const Metadata*> > metadata_arrays_;
 };
 
@@ -3442,7 +3467,7 @@ void AssignDescriptorsImpl(const DescriptorTable* table, bool eager) {
   {
     // This only happens once per proto file. So a global mutex to serialize
     // calls to AddDescriptors.
-    static WrappedMutex mu{GOOGLE_PROTOBUF_LINKER_INITIALIZED};
+    static absl::Mutex mu{absl::kConstInit};
     mu.Lock();
     AddDescriptors(table);
     mu.Unlock();
@@ -3537,9 +3562,8 @@ void RegisterAllTypesInternal(const Metadata* file_level_metadata, int size) {
 namespace internal {
 
 Metadata AssignDescriptors(const DescriptorTable* (*table)(),
-                           internal::once_flag* once,
-                           const Metadata& metadata) {
-  call_once(*once, [=] {
+                           absl::once_flag* once, const Metadata& metadata) {
+  absl::call_once(*once, [=] {
     auto* t = table();
     AssignDescriptorsImpl(t, t->is_eager);
   });
@@ -3549,7 +3573,7 @@ Metadata AssignDescriptors(const DescriptorTable* (*table)(),
 
 void AssignDescriptors(const DescriptorTable* table, bool eager) {
   if (!eager) eager = table->is_eager;
-  call_once(*table->once, AssignDescriptorsImpl, table, eager);
+  absl::call_once(*table->once, AssignDescriptorsImpl, table, eager);
 }
 
 AddDescriptorsRunner::AddDescriptorsRunner(const DescriptorTable* table) {
@@ -3626,4 +3650,4 @@ bool IsDescendant(Message& root, const Message& message) {
 }  // namespace protobuf
 }  // namespace google
 
-#include <google/protobuf/port_undef.inc>
+#include "google/protobuf/port_undef.inc"

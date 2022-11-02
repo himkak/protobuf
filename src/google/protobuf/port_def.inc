@@ -118,6 +118,15 @@
 #define PROTOBUF_has_builtin_DEFINED_
 #endif
 
+#ifdef ADDRESS_SANITIZER
+#include <sanitizer/asan_interface.h>
+#define PROTOBUF_POISON_MEMORY_REGION(p, n) ASAN_POISON_MEMORY_REGION(p, n)
+#define PROTOBUF_UNPOISON_MEMORY_REGION(p, n) ASAN_UNPOISON_MEMORY_REGION(p, n)
+#else  // ADDRESS_SANITIZER
+#define PROTOBUF_POISON_MEMORY_REGION(p, n)
+#define PROTOBUF_UNPOISON_MEMORY_REGION(p, n)
+#endif  // ADDRESS_SANITIZER
+
 // Portable PROTOBUF_BUILTIN_BSWAPxx definitions
 // Code must check for availability, e.g.: `defined(PROTOBUF_BUILTIN_BSWAP32)`
 #ifdef PROTOBUF_BUILTIN_BSWAP16
@@ -201,10 +210,6 @@
 // Owner: mkruskal@
 #define PROTOBUF_FUTURE_REMOVE_CLEARED_API 1
 
-// Used to escape C++20 keywords.
-// TODO(mkruskal): ping b/238664698 when this lands in opensource.
-// Owner: mkruskal@
-#define PROTOBUF_FUTURE_CPP20_KEYWORDS 1
 #else
 #define PROTOBUF_FUTURE_FINAL
 #endif
@@ -212,7 +217,7 @@
 #ifdef PROTOBUF_VERSION
 #error PROTOBUF_VERSION was previously defined
 #endif
-#define PROTOBUF_VERSION 3021005
+#define PROTOBUF_VERSION 3021009
 
 #ifdef PROTOBUF_MIN_HEADER_VERSION_FOR_PROTOC
 #error PROTOBUF_MIN_HEADER_VERSION_FOR_PROTOC was previously defined
@@ -388,15 +393,6 @@
 # define PROTOBUF_DEPRECATED_ENUM __attribute__((deprecated))
 #else
 # define PROTOBUF_DEPRECATED_ENUM
-#endif
-
-#ifdef PROTOBUF_FUNC_ALIGN
-#error PROTOBUF_FUNC_ALIGN was previously defined
-#endif
-#if __has_attribute(aligned) || PROTOBUF_GNUC_MIN(4, 3)
-#define PROTOBUF_FUNC_ALIGN(bytes) __attribute__((aligned(bytes)))
-#else
-#define PROTOBUF_FUNC_ALIGN(bytes)
 #endif
 
 #ifdef PROTOBUF_RETURNS_NONNULL
@@ -822,22 +818,16 @@
 #  endif
 #endif
 
-// Tail call table-driven parsing can be enabled by defining
-// PROTOBUF_EXPERIMENTAL_USE_TAIL_CALL_TABLE_PARSER at compilation time. Note
-// that this macro is for small-scale testing only, and is not supported.
+// Tail call table-driven parsing is enabled by default.
 #ifdef PROTOBUF_TAIL_CALL_TABLE_PARSER_ENABLED
 #error PROTOBUF_TAIL_CALL_TABLE_PARSER_ENABLED was previously declared
 #endif
-#if defined(PROTOBUF_EXPERIMENTAL_USE_TAIL_CALL_TABLE_PARSER)
 #define PROTOBUF_TAIL_CALL_TABLE_PARSER_ENABLED 1
-#endif
 
 #ifdef PROTOBUF_USE_TABLE_PARSER_ON_REFLECTION
 #error PROTOBUF_USE_TABLE_PARSER_ON_REFLECTION was previously defined
 #endif
-#if !defined(PROTOBUF_TEMPORARY_DISABLE_TABLE_PARSER_ON_REFLECTION) && \
-    (defined(PROTOBUF_EXPERIMENTAL_USE_TABLE_PARSER_ON_REFLECTION) ||  \
-     defined(PROTOBUF_TAIL_CALL_TABLE_PARSER_ENABLED))
+#if !defined(PROTOBUF_TEMPORARY_DISABLE_TABLE_PARSER_ON_REFLECTION)
 #define PROTOBUF_USE_TABLE_PARSER_ON_REFLECTION 1
 #endif  // PROTOBUF_ENABLE_FORCE_ALLOCATION_ON_CONSTRUCTION
 
@@ -872,6 +862,27 @@
 
 // ThreadSafeArenaz is turned off completely in opensource builds.
 
+// autoheader defines this in some circumstances
+#ifdef PACKAGE
+#define PROTOBUF_DID_UNDEF_PACKAGE
+#pragma push_macro("PACKAGE")
+#undef PACKAGE
+#endif
+
+// autoheader defines this in some circumstances
+#ifdef PACKAGE
+#define PROTOBUF_DID_UNDEF_PACKAGE
+#pragma push_macro("PACKAGE")
+#undef PACKAGE
+#endif
+
+// linux is a legacy MACRO defined in most popular C++ standards.
+#ifdef linux
+#pragma push_macro("linux")
+#undef linux
+#define PROTOBUF_DID_UNDEF_LINUX
+#endif
+
 // Windows declares several inconvenient macro names.  We #undef them and then
 // restore them in port_undef.inc.
 #ifdef _WIN32
@@ -893,6 +904,8 @@
 #undef ERROR_NOT_FOUND
 #pragma push_macro("GetClassName")
 #undef GetClassName
+#pragma push_macro("GetCurrentTime")
+#undef GetCurrentTime
 #pragma push_macro("GetMessage")
 #undef GetMessage
 #pragma push_macro("GetObject")
@@ -945,6 +958,9 @@
 #undef UID_MAX
 #pragma push_macro("GID_MAX")
 #undef GID_MAX
+// TYPE_BOOL is defined in the MacOS's ConditionalMacros.h.
+#pragma push_macro("TYPE_BOOL")
+#undef TYPE_BOOL
 #endif  // __APPLE__
 
 #if defined(__clang__) || PROTOBUF_GNUC_MIN(3, 0) || defined(_MSC_VER)
@@ -954,13 +970,40 @@
 #undef DEBUG
 #endif // defined(__clang__) || PROTOBUF_GNUC_MIN(3, 0) || defined(_MSC_VER)
 
-#if PROTOBUF_GNUC_MIN(3, 0)
+// Protobuf does not support building with a number of warnings that are noisy
+// (and of variable quality across compiler versions) or impossible to implement
+// effectively but which people turn on anyways.
+#ifdef __clang__
+#pragma clang diagnostic push
+// -Wshorten-64-to-32 is a typical pain where we diff pointers.
+//   char* p = strchr(s, '\n');
+//   return p ? p - s : -1;
+#pragma clang diagnostic ignored "-Wshorten-64-to-32"
+#endif
+#ifdef __GNUC__
+#pragma GCC diagnostic push
+// Some of the warnings below only exist in some GCC versions; those version
+// ranges are poorly documented.
+#pragma GCC diagnostic ignored "-Wpragmas"
 // GCC does not allow disabling diagnostics within an expression:
 // https://gcc.gnu.org/bugzilla/show_bug.cgi?id=60875, so we disable this one
 // globally even though it's only used for PROTOBUF_FIELD_OFFSET.
-#pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Winvalid-offsetof"
+#ifdef __clang__
+// TODO(b/255348263): Upgrade our kokoro Ubuntu to use clang 6, then change th 5 to a 6
+static_assert(PROTOBUF_CLANG_MIN(5, 0), "Protobuf only supports Clang 6.0 and newer.");
 #endif
+// Some versions of GCC seem to think that
+//  [this] { Foo(); }
+// leaves `this` unused, even though `Foo();` is a member function of the
+// captured `this`.
+// https://bugzilla.mozilla.org/show_bug.cgi?id=1373625
+#pragma GCC diagnostic ignored "-Wunused-lambda-capture"
+// -Wsign-conversion causes a lot of warnings on mostly code like:
+//   int index = ...
+//   int value = vec[index];
+#pragma GCC diagnostic ignored "-Wsign-conversion"
+#endif  // __GNUC__
 
 // Silence some MSVC warnings in all our code.
 #ifdef _MSC_VER

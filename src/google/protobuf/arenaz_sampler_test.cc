@@ -28,7 +28,7 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-#include <google/protobuf/arenaz_sampler.h>
+#include "google/protobuf/arenaz_sampler.h"
 
 #include <atomic>
 #include <limits>
@@ -42,7 +42,7 @@
 
 
 // Must be included last.
-#include <google/protobuf/port_def.inc>
+#include "google/protobuf/port_def.inc"
 
 namespace google {
 namespace protobuf {
@@ -91,7 +91,7 @@ namespace {
 TEST(ThreadSafeArenaStatsTest, PrepareForSampling) {
   ThreadSafeArenaStats info;
   constexpr int64_t kTestStride = 107;
-  MutexLock l(&info.init_mu);
+  absl::MutexLock l(&info.init_mu);
   info.PrepareForSampling(kTestStride);
 
   for (const auto& block_stats : info.block_histogram) {
@@ -161,7 +161,7 @@ TEST(ThreadSafeArenaStatsTest, MinMaxBlockSizeForBin) {
 TEST(ThreadSafeArenaStatsTest, RecordAllocateSlow) {
   ThreadSafeArenaStats info;
   constexpr int64_t kTestStride = 458;
-  MutexLock l(&info.init_mu);
+  absl::MutexLock l(&info.init_mu);
   info.PrepareForSampling(kTestStride);
   RecordAllocateSlow(&info, /*requested=*/0, /*allocated=*/128, /*wasted=*/0);
   EXPECT_EQ(
@@ -193,7 +193,7 @@ TEST(ThreadSafeArenaStatsTest, RecordAllocateSlow) {
 TEST(ThreadSafeArenaStatsTest, RecordAllocateSlowMaxBlockSizeTest) {
   ThreadSafeArenaStats info;
   constexpr int64_t kTestStride = 458;
-  MutexLock l(&info.init_mu);
+  absl::MutexLock l(&info.init_mu);
   info.PrepareForSampling(kTestStride);
   RecordAllocateSlow(&info, /*requested=*/100, /*allocated=*/128, /*wasted=*/0);
   EXPECT_EQ(info.max_block_size.load(std::memory_order_relaxed), 128);
@@ -455,7 +455,7 @@ class ThreadSafeArenazSamplerTestThread : public Thread {
 
  public:
   ThreadSafeArenazSamplerTestThread(const thread::Options& options,
-                                    StringPiece name,
+                                    absl::string_view name,
                                     google::protobuf::Arena* arena,
                                     absl::Barrier* barrier)
       : Thread(options, name), arena_(arena), barrier_(barrier) {}
@@ -483,7 +483,7 @@ TEST(ThreadSafeArenazSamplerTest, MultiThread) {
     std::vector<std::unique_ptr<ThreadSafeArenazSamplerTestThread>> threads;
     for (int i = 0; i < kNumThreads; i++) {
       auto t = std::make_unique<ThreadSafeArenazSamplerTestThread>(
-          options, StrCat("thread", i), &arena, barrier);
+          options, absl::StrCat("thread", i), &arena, barrier);
       t->Start();
       threads.push_back(std::move(t));
     }

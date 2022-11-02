@@ -55,19 +55,19 @@
 #include <mach/mach_time.h>
 #endif
 
-#include <google/protobuf/stubs/common.h>
-#include <google/protobuf/arena.h>
-#include <google/protobuf/generated_enum_util.h>
-#include <google/protobuf/map_type_handler.h>
-#include <google/protobuf/port.h>
-#include <google/protobuf/stubs/hash.h>
+#include "google/protobuf/stubs/common.h"
+#include "google/protobuf/arena.h"
+#include "google/protobuf/generated_enum_util.h"
+#include "google/protobuf/map_type_handler.h"
+#include "google/protobuf/port.h"
+
 
 #ifdef SWIG
 #error "You cannot SWIG proto headers"
 #endif
 
 // Must be included last.
-#include <google/protobuf/port_def.inc>
+#include "google/protobuf/port_def.inc"
 
 namespace google {
 namespace protobuf {
@@ -488,6 +488,9 @@ class Map {
           index_of_first_non_null_(internal::kGlobalEmptyTableSize),
           table_(const_cast<void**>(internal::kGlobalEmptyTable)),
           alloc_(arena) {}
+
+    InnerMap(const InnerMap&) = delete;
+    InnerMap& operator=(const InnerMap&) = delete;
 
     ~InnerMap() {
       if (alloc_.arena() == nullptr &&
@@ -1204,7 +1207,6 @@ class Map {
     size_type index_of_first_non_null_;
     void** table_;  // an array with num_buckets_ entries
     Allocator alloc_;
-    GOOGLE_DISALLOW_EVIL_CONSTRUCTORS(InnerMap);
   };  // end of class InnerMap
 
   template <typename LookupKey>
@@ -1435,7 +1437,7 @@ class Map {
 
   void swap(Map& other) {
     if (arena() == other.arena()) {
-      InternalSwap(other);
+      InternalSwap(&other);
     } else {
       // TODO(zuguang): optimize this. The temporary copy can be allocated
       // in the same arena as the other message, and the "other = copy" can
@@ -1446,7 +1448,7 @@ class Map {
     }
   }
 
-  void InternalSwap(Map& other) { elements_.Swap(&other.elements_); }
+  void InternalSwap(Map* other) { elements_.Swap(&other->elements_); }
 
   // Access to hasher.  Currently this returns a copy, but it may
   // be modified to return a const reference in the future.
@@ -1490,6 +1492,6 @@ class Map {
 }  // namespace protobuf
 }  // namespace google
 
-#include <google/protobuf/port_undef.inc>
+#include "google/protobuf/port_undef.inc"
 
 #endif  // GOOGLE_PROTOBUF_MAP_H__

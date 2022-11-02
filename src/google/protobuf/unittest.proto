@@ -194,6 +194,7 @@ message NestedTestAllTypes {
 
 message TestDeprecatedFields {
   optional int32 deprecated_int32 = 1 [deprecated=true];
+  optional TestAllTypes.NestedMessage deprecated_message = 3 [deprecated=true];
   oneof oneof_fields {
     int32 deprecated_int32_in_oneof = 2 [deprecated=true];
   }
@@ -359,6 +360,9 @@ message TestMixedFieldsAndExtensions {
 message TestGroup {
   optional group OptionalGroup = 16 {
     optional int32 a = 17;
+    optional int32 zz = 89;  // fast table size must be at least 16, for this
+                             // field to be parsed by the fast parser, since
+                             // 89 - 17 = 72 is a multiple of 8.
   }
   optional ForeignEnum optional_foreign_enum = 22;
 }
@@ -886,7 +890,6 @@ message TestRequiredOneof {
   }
 }
 
-
 // Test messages for packed fields
 
 message TestPackedTypes {
@@ -991,6 +994,14 @@ message TestDynamicExtensions {
   repeated sint32 packed_extension = 2006 [packed = true];
 }
 
+message TestRepeatedString {
+  repeated string repeated_string1 = 1;
+  repeated string repeated_string2 = 2;
+
+  repeated bytes repeated_bytes11 = 11;
+  repeated bytes repeated_bytes12 = 12;
+}
+
 message TestRepeatedScalarDifferentTagSizes {
   // Parsing repeated fixed size values used to fail. This message needs to be
   // used in order to get a tag of the right size; all of the repeated fields
@@ -1067,7 +1078,6 @@ message TestMessageSize {
   optional int64 m6 = 6;
 }
 
-
 // Test that RPC services work.
 message FooRequest  {}
 message FooResponse {}
@@ -1079,7 +1089,6 @@ service TestService {
   rpc Foo(FooRequest) returns (FooResponse);
   rpc Bar(BarRequest) returns (BarResponse);
 }
-
 
 message BarRequest  {}
 message BarResponse {}
@@ -1434,7 +1443,6 @@ message TestVerifyBigFieldNumberUint32 {
   optional Nested optional_nested = 1;
 }
 
-
 // This message contains different kind of enums to exercise the different
 // parsers in table-driven.
 message EnumParseTester {
@@ -1554,3 +1562,16 @@ message BoolParseTester {
   optional int32 other_field = 99;
 };
 
+message StringParseTester {
+  optional string optional_string_lowfield = 1;
+  optional string optional_string_midfield = 1001;
+  optional string optional_string_hifield = 1000001;
+  repeated string repeated_string_lowfield = 2;
+  repeated string repeated_string_midfield = 1002;
+  repeated string repeated_string_hifield = 1000002;
+};
+
+message BadFieldNames{
+  optional int32 OptionalInt32 = 1;
+  optional int32 for = 2;
+}

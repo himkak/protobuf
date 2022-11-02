@@ -28,7 +28,7 @@ Then you can run the built binary:
     $ bazel-bin/add_person_cpp addressbook.data
 
 To use protobuf in your own bazel project, please follow instructions in the
-[BUILD](BUILD) file and [WORKSPACE](WORKSPACE) file.
+[BUILD.bazel](BUILD.bazel) file and [WORKSPACE](WORKSPACE) file.
 
 ## Build the example using make
 
@@ -37,7 +37,7 @@ minimum requirement is to install protocol compiler (i.e., the protoc binary)
 and the protobuf runtime for the language you want to build.
 
 You can simply run "make" to build the example for all languages (except for
-Go). However, since different language has different installation requirement,
+Go). However, since different languages have different installation requirements,
 it will likely fail. It's better to follow individual instructions below to
 build only the language you are interested in.
 

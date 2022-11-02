@@ -35,15 +35,15 @@
 #ifndef GOOGLE_PROTOBUF_COMPILER_PYTHON_PYI_GENERATOR_H__
 #define GOOGLE_PROTOBUF_COMPILER_PYTHON_PYI_GENERATOR_H__
 
-#include <map>
 #include <set>
 #include <string>
 
-#include <google/protobuf/stubs/mutex.h>
-#include <google/protobuf/compiler/code_generator.h>
+#include "absl/container/flat_hash_map.h"
+#include "absl/synchronization/mutex.h"
+#include "google/protobuf/compiler/code_generator.h"
 
 // Must be included last.
-#include <google/protobuf/port_def.inc>
+#include "google/protobuf/port_def.inc"
 
 namespace google {
 namespace protobuf {
@@ -63,6 +63,8 @@ namespace python {
 class PROTOC_EXPORT PyiGenerator : public google::protobuf::compiler::CodeGenerator {
  public:
   PyiGenerator();
+  PyiGenerator(const PyiGenerator&) = delete;
+  PyiGenerator& operator=(const PyiGenerator&) = delete;
   ~PyiGenerator() override;
 
   // CodeGenerator methods.
@@ -77,6 +79,8 @@ class PROTOC_EXPORT PyiGenerator : public google::protobuf::compiler::CodeGenera
  private:
   void PrintImportForDescriptor(const FileDescriptor& desc,
                                 std::set<std::string>* seen_aliases) const;
+  template <typename DescriptorT>
+  void Annotate(const std::string& label, const DescriptorT* descriptor) const;
   void PrintImports() const;
   void PrintTopLevelEnums() const;
   void PrintEnum(const EnumDescriptor& enum_descriptor) const;
@@ -97,13 +101,12 @@ class PROTOC_EXPORT PyiGenerator : public google::protobuf::compiler::CodeGenera
 
   // Very coarse-grained lock to ensure that Generate() is reentrant.
   // Guards file_, printer_, and import_map_.
-  mutable Mutex mutex_;
+  mutable absl::Mutex mutex_;
   mutable const FileDescriptor* file_;  // Set in Generate().  Under mutex_.
   mutable io::Printer* printer_;        // Set in Generate().  Under mutex_.
   // import_map will be a mapping from filename to module alias, e.g.
   // "google3/foo/bar.py" -> "_bar"
-  mutable std::map<std::string, std::string> import_map_;
-  GOOGLE_DISALLOW_EVIL_CONSTRUCTORS(PyiGenerator);
+  mutable absl::flat_hash_map<std::string, std::string> import_map_;
 };
 
 }  // namespace python
@@ -111,6 +114,6 @@ class PROTOC_EXPORT PyiGenerator : public google::protobuf::compiler::CodeGenera
 }  // namespace protobuf
 }  // namespace google
 
-#include <google/protobuf/port_undef.inc>
+#include "google/protobuf/port_undef.inc"
 
 #endif  // GOOGLE_PROTOBUF_COMPILER_PYTHON_PYI_GENERATOR_H__

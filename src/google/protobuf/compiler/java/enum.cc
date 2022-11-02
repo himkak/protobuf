@@ -32,21 +32,21 @@
 //  Based on original Protocol Buffers design by
 //  Sanjay Ghemawat, Jeff Dean, and others.
 
-#include <google/protobuf/compiler/java/enum.h>
+#include "google/protobuf/compiler/java/enum.h"
 
-#include <map>
 #include <string>
 
-#include <google/protobuf/io/printer.h>
-#include <google/protobuf/stubs/strutil.h>
-#include <google/protobuf/compiler/java/context.h>
-#include <google/protobuf/compiler/java/doc_comment.h>
-#include <google/protobuf/compiler/java/helpers.h>
-#include <google/protobuf/compiler/java/name_resolver.h>
-#include <google/protobuf/descriptor.pb.h>
+#include "google/protobuf/io/printer.h"
+#include "absl/container/flat_hash_map.h"
+#include "absl/strings/str_cat.h"
+#include "google/protobuf/compiler/java/context.h"
+#include "google/protobuf/compiler/java/doc_comment.h"
+#include "google/protobuf/compiler/java/helpers.h"
+#include "google/protobuf/compiler/java/name_resolver.h"
+#include "google/protobuf/descriptor.pb.h"
 
 // Must be last.
-#include <google/protobuf/port_def.inc>
+#include "google/protobuf/port_def.inc"
 
 namespace google {
 namespace protobuf {
@@ -103,10 +103,10 @@ void EnumGenerator::Generate(io::Printer* printer) {
   }
 
   for (int i = 0; i < canonical_values_.size(); i++) {
-    std::map<std::string, std::string> vars;
+    absl::flat_hash_map<absl::string_view, std::string> vars;
     vars["name"] = canonical_values_[i]->name();
-    vars["index"] = StrCat(canonical_values_[i]->index());
-    vars["number"] = StrCat(canonical_values_[i]->number());
+    vars["index"] = absl::StrCat(canonical_values_[i]->index());
+    vars["number"] = absl::StrCat(canonical_values_[i]->number());
     WriteEnumValueDocComment(printer, canonical_values_[i]);
     if (canonical_values_[i]->options().deprecated()) {
       printer->Print("@java.lang.Deprecated\n");
@@ -135,7 +135,7 @@ void EnumGenerator::Generate(io::Printer* printer) {
   // -----------------------------------------------------------------
 
   for (int i = 0; i < aliases_.size(); i++) {
-    std::map<std::string, std::string> vars;
+    absl::flat_hash_map<absl::string_view, std::string> vars;
     vars["classname"] = descriptor_->name();
     vars["name"] = aliases_[i].value->name();
     vars["canonical_name"] = aliases_[i].canonical_value->name();
@@ -146,9 +146,9 @@ void EnumGenerator::Generate(io::Printer* printer) {
   }
 
   for (int i = 0; i < descriptor_->value_count(); i++) {
-    std::map<std::string, std::string> vars;
+    absl::flat_hash_map<absl::string_view, std::string> vars;
     vars["name"] = descriptor_->value(i)->name();
-    vars["number"] = StrCat(descriptor_->value(i)->number());
+    vars["number"] = absl::StrCat(descriptor_->value(i)->number());
     vars["{"] = "";
     vars["}"] = "";
     vars["deprecation"] = descriptor_->value(i)->options().deprecated()
@@ -220,7 +220,7 @@ void EnumGenerator::Generate(io::Printer* printer) {
   for (int i = 0; i < canonical_values_.size(); i++) {
     printer->Print("case $number$: return $name$;\n", "name",
                    canonical_values_[i]->name(), "number",
-                   StrCat(canonical_values_[i]->number()));
+                   absl::StrCat(canonical_values_[i]->number()));
   }
 
   printer->Outdent();
@@ -290,7 +290,7 @@ void EnumGenerator::Generate(io::Printer* printer) {
           "  return $file$.getDescriptor().getEnumTypes().get($index$);\n",
           "file",
           name_resolver_->GetClassName(descriptor_->file(), immutable_api_),
-          "index", StrCat(descriptor_->index()));
+          "index", absl::StrCat(descriptor_->index()));
     } else {
       printer->Print(
           "  return $parent$.$descriptor$.getEnumTypes().get($index$);\n",
@@ -303,7 +303,7 @@ void EnumGenerator::Generate(io::Printer* printer) {
                   .no_standard_descriptor_accessor()
               ? "getDefaultInstance().getDescriptorForType()"
               : "getDescriptor()",
-          "index", StrCat(descriptor_->index()));
+          "index", absl::StrCat(descriptor_->index()));
     }
 
     printer->Print(
@@ -407,4 +407,4 @@ bool EnumGenerator::CanUseEnumValues() {
 }  // namespace protobuf
 }  // namespace google
 
-#include <google/protobuf/port_undef.inc>
+#include "google/protobuf/port_undef.inc"

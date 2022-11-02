@@ -41,17 +41,37 @@ def protobuf_deps():
         _github_archive(
             name = "com_google_absl",
             repo = "https://github.com/abseil/abseil-cpp",
-            commit = "215105818dfde3174fe799600bb0f3cae233d0bf",
-            sha256 = "b4e20d9e752a75c10636675691b1e9c2698e0764cb404987d0ffa77223041c19",
+            commit = "273292d1cfc0a94a65082ee350509af1d113344d",
+            sha256 = "6764f226bd6e2d8ab9fe2f3cab5f45fb1a4a15c04b58b87ba7fa87456054f98b",
         )
 
     if not native.existing_rule("zlib"):
         http_archive(
             name = "zlib",
             build_file = "@com_google_protobuf//:third_party/zlib.BUILD",
-            sha256 = "629380c90a77b964d896ed37163f5c3a34f6e6d897311f1df2a7016355c45eff",
-            strip_prefix = "zlib-1.2.11",
-            urls = ["https://github.com/madler/zlib/archive/v1.2.11.tar.gz"],
+            sha256 = "d14c38e313afc35a9a8760dadf26042f51ea0f5d154b0630a31da0540107fb98",
+            strip_prefix = "zlib-1.2.13",
+            urls = [
+                "https://github.com/madler/zlib/releases/download/v1.2.13/zlib-1.2.13.tar.xz",
+                "https://zlib.net/zlib-1.2.13.tar.xz",
+            ],
+        )
+
+    if not native.existing_rule("jsoncpp"):
+        http_archive(
+            name = "jsoncpp",
+            build_file = "@com_google_protobuf//:third_party/jsoncpp.BUILD",
+            sha256 = "e34a628a8142643b976c7233ef381457efad79468c67cb1ae0b83a33d7493999",
+            strip_prefix = "jsoncpp-1.9.4",
+            urls = ["https://github.com/open-source-parsers/jsoncpp/archive/refs/tags/1.9.4.tar.gz"],
+        )
+
+    if not native.existing_rule("utf8_range"):
+        _github_archive(
+            name = "utf8_range",
+            repo = "https://github.com/protocolbuffers/utf8_range",
+            commit = "de0b4a8ff9b5d4c98108bdfe723291a33c52c54f",
+            sha256 = "5da960e5e5d92394c809629a03af3c7709d2d3d0ca731dacb3a9fb4bf28f7702",
         )
 
     if not native.existing_rule("rules_cc"):
@@ -115,6 +135,6 @@ def protobuf_deps():
         _github_archive(
             name = "upb",
             repo = "https://github.com/protocolbuffers/upb",
-            commit = "63a4a7d74bcbc8c6b94e6b18e599ffc68c71b91c",
-            sha256 = "9c921e799c4a5446b7164368a6579e20121103646045cd93986ba5bb8b376b29",
+            commit = "9e2d7f02da5440bfb0dfb069f61baa278aa2fbf6",
+            sha256 = "9eb13368a136af314855e1497838cf3124846b6a73a7e7c882455a52b8c04662",
         )

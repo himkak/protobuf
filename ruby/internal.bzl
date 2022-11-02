@@ -15,7 +15,6 @@ def internal_ruby_extension(
       **kwargs: extra arguments to forward to the genrule.
     """
 
-
     native.genrule(
         name = name,
         srcs = deps + [
@@ -23,7 +22,7 @@ def internal_ruby_extension(
             ":srcs",
             ":test_ruby_protos",
             ":tests",
-            "//third_party/utf8_range:all_files",
+            "@utf8_range//:utf8_range_srcs",
         ],
         tags = ["manual"],
         outs = [extension],
@@ -31,5 +30,5 @@ def internal_ruby_extension(
               "BAZEL=true rake\n" +
               "popd\n" +
               "cp `dirname $(location Rakefile)`/%s $(OUTS)\n" % extension,
-        **kwargs,
+        **kwargs
     )

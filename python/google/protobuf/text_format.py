@@ -557,7 +557,7 @@ class _Printer(object):
         # For groups, use the capitalized name.
         out.write(field.message_type.name)
       else:
-          out.write(field.name)
+        out.write(field.name)
 
     if (self.force_colon or
         field.cpp_type != descriptor.FieldDescriptor.CPPTYPE_MESSAGE):
@@ -862,6 +862,8 @@ class _Parser(object):
     except UnicodeDecodeError as e:
       raise self._StringParseError(e)
     tokenizer = Tokenizer(str_lines)
+    if message:
+      self.root_type = message.DESCRIPTOR.full_name
     while not tokenizer.AtEnd():
       self._MergeField(tokenizer, message)
 
@@ -881,7 +883,8 @@ class _Parser(object):
       type_url_prefix, packed_type_name = self._ConsumeAnyTypeUrl(tokenizer)
       tokenizer.Consume(']')
       tokenizer.TryConsume(':')
-      self._DetectSilentMarker(tokenizer)
+      self._DetectSilentMarker(tokenizer,
+                               type_url_prefix + '/' + packed_type_name)
       if tokenizer.TryConsume('<'):
         expanded_any_end_token = '>'
       else:
@@ -920,8 +923,6 @@ class _Parser(object):
       # pylint: disable=protected-access
       field = message.Extensions._FindExtensionByName(name)
       # pylint: enable=protected-access
-
-
       if not field:
         if self.allow_unknown_extension:
           field = None
@@ -981,11 +982,11 @@ class _Parser(object):
 
       if field.cpp_type == descriptor.FieldDescriptor.CPPTYPE_MESSAGE:
         tokenizer.TryConsume(':')
-        self._DetectSilentMarker(tokenizer)
+        self._DetectSilentMarker(tokenizer, field.full_name)
         merger = self._MergeMessageField
       else:
         tokenizer.Consume(':')
-        self._DetectSilentMarker(tokenizer)
+        self._DetectSilentMarker(tokenizer, field.full_name)
         merger = self._MergeScalarField
 
       if (field.label == descriptor.FieldDescriptor.LABEL_REPEATED and
@@ -1003,20 +1004,19 @@ class _Parser(object):
 
     else:  # Proto field is unknown.
       assert (self.allow_unknown_extension or self.allow_unknown_field)
-      self._SkipFieldContents(tokenizer)
+      self._SkipFieldContents(tokenizer, name)
 
     # For historical reasons, fields may optionally be separated by commas or
     # semicolons.
     if not tokenizer.TryConsume(','):
       tokenizer.TryConsume(';')
 
-
-  def _LogSilentMarker(self):
+  def _LogSilentMarker(self, field_name):
     pass
 
-  def _DetectSilentMarker(self, tokenizer):
+  def _DetectSilentMarker(self, tokenizer, field_name):
     if tokenizer.contains_silent_marker_before_current_token:
-      self._LogSilentMarker()
+      self._LogSilentMarker(field_name)
 
   def _ConsumeAnyTypeUrl(self, tokenizer):
     """Consumes a google.protobuf.Any type URL and returns the type name."""
@@ -1172,11 +1172,12 @@ class _Parser(object):
         else:
           setattr(message, field.name, value)
 
-  def _SkipFieldContents(self, tokenizer):
+  def _SkipFieldContents(self, tokenizer, field_name):
     """Skips over contents (value or message) of a field.
 
     Args:
       tokenizer: A tokenizer to parse the field name and values.
+      field_name: The field name currently being parsed.
     """
     # Try to guess the type of this field.
     # If this field is not a message, there should be a ":" between the
@@ -1186,13 +1187,13 @@ class _Parser(object):
     # to be a message or the input is ill-formed.
     if tokenizer.TryConsume(
         ':') and not tokenizer.LookingAt('{') and not tokenizer.LookingAt('<'):
-      self._DetectSilentMarker(tokenizer)
+      self._DetectSilentMarker(tokenizer, field_name)
       if tokenizer.LookingAt('['):
         self._SkipRepeatedFieldValue(tokenizer)
       else:
         self._SkipFieldValue(tokenizer)
     else:
-      self._DetectSilentMarker(tokenizer)
+      self._DetectSilentMarker(tokenizer, field_name)
       self._SkipFieldMessage(tokenizer)
 
   def _SkipField(self, tokenizer):
@@ -1201,23 +1202,25 @@ class _Parser(object):
     Args:
       tokenizer: A tokenizer to parse the field name and values.
     """
+    field_name = ''
     if tokenizer.TryConsume('['):
       # Consume extension or google.protobuf.Any type URL
-      tokenizer.ConsumeIdentifier()
+      field_name += '[' + tokenizer.ConsumeIdentifier()
       num_identifiers = 1
       while tokenizer.TryConsume('.'):
-        tokenizer.ConsumeIdentifier()
+        field_name += '.' + tokenizer.ConsumeIdentifier()
         num_identifiers += 1
       # This is possibly a type URL for an Any message.
       if num_identifiers == 3 and tokenizer.TryConsume('/'):
-        tokenizer.ConsumeIdentifier()
+        field_name += '/' + tokenizer.ConsumeIdentifier()
         while tokenizer.TryConsume('.'):
-          tokenizer.ConsumeIdentifier()
+          field_name += '.' + tokenizer.ConsumeIdentifier()
       tokenizer.Consume(']')
+      field_name += ']'
     else:
-      tokenizer.ConsumeIdentifierOrNumber()
+      field_name += tokenizer.ConsumeIdentifierOrNumber()
 
-    self._SkipFieldContents(tokenizer)
+    self._SkipFieldContents(tokenizer, field_name)
 
     # For historical reasons, fields may optionally be separated by commas or
     # semicolons.

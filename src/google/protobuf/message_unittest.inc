@@ -44,29 +44,30 @@
 #include <limits>
 #include <vector>
 
-#include <google/protobuf/message.h>
+#include "google/protobuf/message.h"
+#include "absl/strings/cord.h"
 #ifndef _MSC_VER
 #include <unistd.h>
 #endif
 #include <fstream>
 #include <sstream>
 
-#include <google/protobuf/stubs/logging.h>
-#include <google/protobuf/stubs/common.h>
-#include <google/protobuf/descriptor.pb.h>
+#include "google/protobuf/stubs/logging.h"
+#include "google/protobuf/stubs/common.h"
+#include "google/protobuf/descriptor.pb.h"
 #include <gmock/gmock.h>
-#include <google/protobuf/testing/googletest.h>
+#include "google/protobuf/testing/googletest.h"
 #include <gtest/gtest.h>
-#include <google/protobuf/stubs/logging.h>
-#include <google/protobuf/stubs/substitute.h>
-#include <google/protobuf/arena.h>
-#include <google/protobuf/descriptor.h>
-#include <google/protobuf/io/io_win32.h>
-#include <google/protobuf/generated_message_reflection.h>
-#include <google/protobuf/io/coded_stream.h>
-#include <google/protobuf/io/zero_copy_stream.h>
-#include <google/protobuf/io/zero_copy_stream_impl.h>
-#include <google/protobuf/test_util2.h>
+#include "google/protobuf/stubs/logging.h"
+#include "absl/strings/substitute.h"
+#include "google/protobuf/arena.h"
+#include "google/protobuf/descriptor.h"
+#include "google/protobuf/generated_message_reflection.h"
+#include "google/protobuf/io/coded_stream.h"
+#include "google/protobuf/io/io_win32.h"
+#include "google/protobuf/io/zero_copy_stream.h"
+#include "google/protobuf/io/zero_copy_stream_impl.h"
+#include "google/protobuf/test_util2.h"
 
 
 namespace google {
@@ -257,7 +258,7 @@ TEST(MESSAGE_TEST_NAME, ParseFailsIfExtensionNotInitialized) {
   }
 
   EXPECT_THAT(errors,
-              testing::ElementsAre(strings::Substitute(
+              testing::ElementsAre(absl::Substitute(
                   "Can't parse message of type \"$0.TestChildExtension\" "
                   "because it is missing required fields: "
                   "optional_extension.($0.TestRequired.single).a, "
@@ -1190,13 +1191,41 @@ uint8_t* AddNonCanonicalBytes(const uint8_t* buf, uint8_t* p,
   return p;
 }
 
-std::string EncodeEnumValue(int number, int value, int non_canonical_bytes) {
+std::string EncodeEnumValue(int number, int value, int non_canonical_bytes,
+                            bool use_packed) {
   uint8_t buf[100];
   uint8_t* p = buf;
 
-  p = internal::WireFormatLite::WriteEnumToArray(number, value, p);
-  p = AddNonCanonicalBytes(buf, p, non_canonical_bytes);
-  return std::string(buf, p);
+  if (use_packed) {
+    p = internal::WireFormatLite::WriteEnumNoTagToArray(value, p);
+    p = AddNonCanonicalBytes(buf, p, non_canonical_bytes);
+
+    std::string payload(buf, p);
+    p = buf;
+    p = internal::WireFormatLite::WriteStringToArray(number, payload, p);
+    return std::string(buf, p);
+
+  } else {
+    p = internal::WireFormatLite::WriteEnumToArray(number, value, p);
+    p = AddNonCanonicalBytes(buf, p, non_canonical_bytes);
+    return std::string(buf, p);
+  }
+}
+
+std::string EncodeOverlongEnum(int number, bool use_packed) {
+  uint8_t buf[100];
+  uint8_t* p = buf;
+
+  std::string overlong(16, static_cast<char>(0x80));
+  if (use_packed) {
+    p = internal::WireFormatLite::WriteStringToArray(number, overlong, p);
+    return std::string(buf, p);
+  } else {
+    p = internal::WireFormatLite::WriteTagToArray(
+        number, internal::WireFormatLite::WIRETYPE_VARINT, p);
+    p = std::copy(overlong.begin(), overlong.end(), p);
+    return std::string(buf, p);
+  }
 }
 
 std::string EncodeOtherField() {
@@ -1223,62 +1252,77 @@ TEST(MESSAGE_TEST_NAME, TestEnumParsers) {
   constexpr int kInvalidValue = 0x900913;
   auto* ref = obj.GetReflection();
   auto* descriptor = obj.descriptor();
-  for (bool use_tail_field : {false, true}) {
-    SCOPED_TRACE(use_tail_field);
-    for (int non_canonical_bytes = 0; non_canonical_bytes < 5;
-         ++non_canonical_bytes) {
-      SCOPED_TRACE(non_canonical_bytes);
-      for (int i = 0; i < descriptor->field_count(); ++i) {
-        const auto* field = descriptor->field(i);
-        if (field->name() == "other_field") continue;
-        SCOPED_TRACE(field->full_name());
-        const auto* enum_desc = field->enum_type();
-        for (int e = 0; e < enum_desc->value_count(); ++e) {
-          const auto* value_desc = enum_desc->value(e);
-          if (value_desc->number() < 0 && non_canonical_bytes > 0) {
-            // Negative numbers only have a canonical representation.
-            continue;
-          }
-          SCOPED_TRACE(value_desc->number());
-          GOOGLE_CHECK_NE(value_desc->number(), kInvalidValue)
-              << "Invalid value is a real label.";
-          auto encoded = EncodeEnumValue(field->number(), value_desc->number(),
-                                         non_canonical_bytes);
-          if (use_tail_field) {
-            // Make sure that fields after this one can be parsed too. ie test
-            // that the "next" jump is correct too.
-            encoded += other_field;
+  for (bool use_packed : {false, true}) {
+    SCOPED_TRACE(use_packed);
+    for (bool use_tail_field : {false, true}) {
+      SCOPED_TRACE(use_tail_field);
+      for (int non_canonical_bytes = 0; non_canonical_bytes < 5;
+           ++non_canonical_bytes) {
+        SCOPED_TRACE(non_canonical_bytes);
+        for (int i = 0; i < descriptor->field_count(); ++i) {
+          const auto* field = descriptor->field(i);
+          if (field->name() == "other_field") continue;
+          if (!field->is_repeated() && use_packed) continue;
+          SCOPED_TRACE(field->full_name());
+          const auto* enum_desc = field->enum_type();
+          for (int e = 0; e < enum_desc->value_count(); ++e) {
+            const auto* value_desc = enum_desc->value(e);
+            if (value_desc->number() < 0 && non_canonical_bytes > 0) {
+              // Negative numbers only have a canonical representation.
+              continue;
+            }
+            SCOPED_TRACE(value_desc->number());
+            GOOGLE_CHECK_NE(value_desc->number(), kInvalidValue)
+                << "Invalid value is a real label.";
+            auto encoded =
+                EncodeEnumValue(field->number(), value_desc->number(),
+                                non_canonical_bytes, use_packed);
+            if (use_tail_field) {
+              // Make sure that fields after this one can be parsed too. ie test
+              // that the "next" jump is correct too.
+              encoded += other_field;
+            }
+
+            EXPECT_TRUE(obj.ParseFromString(encoded));
+            if (field->is_repeated()) {
+              ASSERT_EQ(ref->FieldSize(obj, field), 1);
+              EXPECT_EQ(ref->GetRepeatedEnumValue(obj, field, 0),
+                        value_desc->number());
+            } else {
+              EXPECT_TRUE(ref->HasField(obj, field));
+              EXPECT_EQ(ref->GetEnumValue(obj, field), value_desc->number());
+            }
+            auto& unknown = ref->GetUnknownFields(obj);
+            ASSERT_EQ(unknown.field_count(), 0);
           }
 
-          EXPECT_TRUE(obj.ParseFromString(encoded));
-          if (field->is_repeated()) {
-            ASSERT_EQ(ref->FieldSize(obj, field), 1);
-            EXPECT_EQ(ref->GetRepeatedEnumValue(obj, field, 0),
-                      value_desc->number());
-          } else {
-            EXPECT_TRUE(ref->HasField(obj, field));
-            EXPECT_EQ(ref->GetEnumValue(obj, field), value_desc->number());
+          {
+            SCOPED_TRACE("Invalid value");
+            // Try an invalid value, which should go to the unknown fields.
+            EXPECT_TRUE(obj.ParseFromString(
+                EncodeEnumValue(field->number(), kInvalidValue,
+                                non_canonical_bytes, use_packed)));
+            if (field->is_repeated()) {
+              ASSERT_EQ(ref->FieldSize(obj, field), 0);
+            } else {
+              EXPECT_FALSE(ref->HasField(obj, field));
+              EXPECT_EQ(ref->GetEnumValue(obj, field),
+                        enum_desc->value(0)->number());
+            }
+            auto& unknown = ref->GetUnknownFields(obj);
+            ASSERT_EQ(unknown.field_count(), 1);
+            EXPECT_EQ(unknown.field(0).number(), field->number());
+            EXPECT_EQ(unknown.field(0).type(), unknown.field(0).TYPE_VARINT);
+            EXPECT_EQ(unknown.field(0).varint(), kInvalidValue);
           }
-          auto& unknown = ref->GetUnknownFields(obj);
-          ASSERT_EQ(unknown.field_count(), 0);
+          {
+            SCOPED_TRACE("Overlong varint");
+            // Try an overlong varint. It should fail parsing, but not trigger
+            // any sanitizer warning.
+            EXPECT_FALSE(obj.ParseFromString(
+                EncodeOverlongEnum(field->number(), use_packed)));
+          }
         }
-
-        SCOPED_TRACE("Invalid value");
-        // Try an invalid value, which should go to the unknown fields.
-        EXPECT_TRUE(obj.ParseFromString(EncodeEnumValue(
-            field->number(), kInvalidValue, non_canonical_bytes)));
-        if (field->is_repeated()) {
-          ASSERT_EQ(ref->FieldSize(obj, field), 0);
-        } else {
-          EXPECT_FALSE(ref->HasField(obj, field));
-          EXPECT_EQ(ref->GetEnumValue(obj, field),
-                    enum_desc->value(0)->number());
-        }
-        auto& unknown = ref->GetUnknownFields(obj);
-        ASSERT_EQ(unknown.field_count(), 1);
-        EXPECT_EQ(unknown.field(0).number(), field->number());
-        EXPECT_EQ(unknown.field(0).type(), unknown.field(0).TYPE_VARINT);
-        EXPECT_EQ(unknown.field(0).varint(), kInvalidValue);
       }
     }
   }
@@ -1349,6 +1393,129 @@ TEST(MESSAGE_TEST_NAME, IsDefaultInstance) {
   const auto* r = msg.GetReflection();
   EXPECT_TRUE(r->IsDefaultInstance(default_msg));
   EXPECT_FALSE(r->IsDefaultInstance(msg));
+}
+
+std::string EncodeStringValue(int number, const std::string& value) {
+  uint8_t buf[100];
+  return std::string(
+      buf, internal::WireFormatLite::WriteStringToArray(number, value, buf));
+}
+
+class TestInputStream final : public io::ZeroCopyInputStream {
+ public:
+  explicit TestInputStream(absl::string_view payload, size_t break_pos)
+      : payload_(payload), break_pos_(break_pos) {}
+
+  bool Next(const void** data, int* size) override {
+    if (payload_.empty()) return false;
+    const auto to_consume = payload_.substr(0, break_pos_);
+    *data = to_consume.data();
+    *size = to_consume.size();
+    payload_.remove_prefix(to_consume.size());
+    // The next time will consume the rest.
+    break_pos_ = payload_.npos;
+
+    return true;
+  }
+
+  void BackUp(int) override { GOOGLE_CHECK(false); }
+  bool Skip(int) override {
+    GOOGLE_CHECK(false);
+    return false;
+  }
+  int64_t ByteCount() const override {
+    GOOGLE_CHECK(false);
+    return 0;
+  }
+
+ private:
+  absl::string_view payload_;
+  size_t break_pos_;
+};
+
+TEST(MESSAGE_TEST_NAME, TestRepeatedStringParsers) {
+  google::protobuf::Arena arena;
+
+  const std::string sample =
+      "abcdefghijklmnopqrstuvwxyz"
+      "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+
+  const auto* const descriptor = UNITTEST::StringParseTester::descriptor();
+
+  static const size_t sso_capacity = std::string().capacity();
+  if (sso_capacity == 0) GTEST_SKIP();
+  // SSO, !SSO, and off-by-one just in case
+  for (size_t size :
+       {sso_capacity - 1, sso_capacity, sso_capacity + 1, sso_capacity + 2}) {
+    SCOPED_TRACE(size);
+    const std::string value = sample.substr(0, size);
+    for (int i = 0; i < descriptor->field_count(); ++i) {
+        const auto* field = descriptor->field(i);
+        SCOPED_TRACE(field->full_name());
+        const auto encoded = EncodeStringValue(field->number(), sample) +
+                             EncodeStringValue(field->number(), value);
+        // Check for different breaks in the input stream to test cases where
+        // the payload can be read and can't be read in one go.
+        for (size_t i = 1; i <= encoded.size(); ++i) {
+          TestInputStream input_stream(encoded, i);
+
+          auto& obj = *arena.CreateMessage<UNITTEST::StringParseTester>(&arena);
+          auto* ref = obj.GetReflection();
+          EXPECT_TRUE(obj.ParseFromZeroCopyStream(&input_stream));
+          if (field->is_repeated()) {
+            ASSERT_EQ(ref->FieldSize(obj, field), 2);
+            EXPECT_EQ(ref->GetRepeatedString(obj, field, 0), sample);
+            EXPECT_EQ(ref->GetRepeatedString(obj, field, 1), value);
+          } else {
+            EXPECT_EQ(ref->GetString(obj, field), value);
+          }
+        }
+    }
+  }
+}
+
+TEST(MESSAGE_TEST_NAME, TestRegressionOnParseFailureNotSettingHasBits) {
+  std::string single_field;
+  // We use blocks because we want fully new instances of the proto. We are
+  // testing .Clear(), so we can't use it to set up the test.
+  {
+    UNITTEST::TestAllTypes message;
+    message.set_optional_int32(17);
+    single_field = message.SerializeAsString();
+  }
+  const auto validate_message = [] (auto& message) {
+    if (!message.has_optional_int32()) {
+      EXPECT_EQ(message.optional_int32(), 0);
+    }
+    message.Clear();
+    EXPECT_FALSE(message.has_optional_int32());
+    EXPECT_EQ(message.optional_int32(), 0);
+  };
+  {
+    // Verify the setup is correct.
+    UNITTEST::TestAllTypes message;
+    EXPECT_FALSE(message.has_optional_int32());
+    EXPECT_EQ(message.optional_int32(), 0);
+    EXPECT_TRUE(message.ParseFromString(single_field));
+    validate_message(message);
+  }
+  {
+    // Run the regression.
+    // These are the steps:
+    // - The stream contains a fast field, and then a failure in MiniParse
+    // - The parsing fails.
+    // - We call clear.
+    // - The fast field should be reset.
+    UNITTEST::TestAllTypes message;
+    EXPECT_FALSE(message.has_optional_int32());
+    EXPECT_EQ(message.optional_int32(), 0);
+    // The second tag will fail to parse because it has too many continuation
+    // bits.
+    auto with_error =
+        absl::StrCat(single_field, std::string(100, static_cast<char>(0x80)));
+    EXPECT_FALSE(message.ParseFromString(with_error));
+    validate_message(message);
+  }
 }
 
 }  // namespace protobuf

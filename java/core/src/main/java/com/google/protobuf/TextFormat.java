@@ -61,7 +61,6 @@ public final class TextFormat {
 
   private static final String DEBUG_STRING_SILENT_MARKER = "\t ";
 
-
   /**
    * Outputs a textual representation of the Protocol Message supplied into the parameter output.
    * (This representation is the new version of the classic "ProtocolPrinter" output from the
@@ -133,7 +132,7 @@ public final class TextFormat {
   public static String shortDebugString(final FieldDescriptor field, final Object value) {
     return printer().shortDebugString(field, value);
   }
-  //
+
   /**
    * Generates a human readable form of the unknown fields, useful for debugging and other
    * purposes, with no newline characters.
@@ -192,7 +191,7 @@ public final class TextFormat {
   public static String printToUnicodeString(final UnknownFieldSet fields) {
     return printer().escapingNonAscii(false).printToString(fields);
   }
-  //
+
   /** @deprecated Use {@code printer().printField(FieldDescriptor, Object, Appendable)} */
   @Deprecated
   public static void printField(
@@ -200,13 +199,13 @@ public final class TextFormat {
       throws IOException {
     printer().printField(field, value, output);
   }
-  //
+
   /** @deprecated Use {@code printer().printFieldToString(FieldDescriptor, Object)} */
   @Deprecated
   public static String printFieldToString(final FieldDescriptor field, final Object value) {
     return printer().printFieldToString(field, value);
   }
-  //
+
   /**
    * Outputs a unicode textual representation of the value of given field value.
    *
@@ -466,7 +465,6 @@ public final class TextFormat {
       @SuppressWarnings({"rawtypes"})
       private MapEntry mapEntry;
 
-
       private final FieldDescriptor.JavaType fieldType;
 
       MapEntryAdapter(Object entry, FieldDescriptor fieldDescriptor) {
@@ -605,7 +603,7 @@ public final class TextFormat {
 
         case MESSAGE:
         case GROUP:
-          print((Message) value, generator);
+          print((MessageOrBuilder) value, generator);
           break;
       }
     }
@@ -739,9 +737,9 @@ public final class TextFormat {
           // Groups must be serialized with their original capitalization.
           generator.print(field.getMessageType().getName());
         } else {
-            generator.print(field.getName());
-          }
+          generator.print(field.getName());
         }
+      }
 
       if (field.getJavaType() == FieldDescriptor.JavaType.MESSAGE) {
         generator.print(" {");
@@ -1500,7 +1498,6 @@ public final class TextFormat {
     PARSER.merge(input, extensionRegistry, builder);
   }
 
-
   /**
    * Parse a text-format message from {@code input} and merge the contents into {@code builder}.
    * Extensions will be recognized if they are registered in {@code extensionRegistry}.
@@ -1530,7 +1527,6 @@ public final class TextFormat {
     T output = (T) builder.build();
     return output;
   }
-
 
   /**
    * Parser for text-format proto2 instances. This class is thread-safe. The implementation largely
@@ -1701,7 +1697,6 @@ public final class TextFormat {
       merge(toStringBuilder(input), extensionRegistry, builder);
     }
 
-
     private static final int BUFFER_SIZE = 4096;
 
     // TODO(chrisn): See if working around java.io.Reader#read(CharBuffer)
@@ -1792,7 +1787,6 @@ public final class TextFormat {
       checkUnknownFields(unknownFields);
     }
 
-
     /** Parse a single field from {@code tokenizer} and merge it into {@code builder}. */
     private void mergeField(
         final Tokenizer tokenizer,
@@ -1836,16 +1830,16 @@ public final class TextFormat {
         extension = target.findExtensionByName(extensionRegistry, name);
 
         if (extension == null) {
-            String message =
-                (tokenizer.getPreviousLine() + 1)
-                    + ":"
-                    + (tokenizer.getPreviousColumn() + 1)
-                    + ":\t"
-                    + type.getFullName()
-                    + ".["
-                    + name
-                    + "]";
-            unknownFields.add(new UnknownField(message, UnknownField.Type.EXTENSION));
+          String message =
+              (tokenizer.getPreviousLine() + 1)
+                  + ":"
+                  + (tokenizer.getPreviousColumn() + 1)
+                  + ":\t"
+                  + type.getFullName()
+                  + ".["
+                  + name
+                  + "]";
+          unknownFields.add(new UnknownField(message, UnknownField.Type.EXTENSION));
         } else {
           if (extension.descriptor.getContainingType() != type) {
             throw tokenizer.parseExceptionPreviousToken(
