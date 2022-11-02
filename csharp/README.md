@@ -19,7 +19,7 @@ Supported platforms
 The runtime library is built as a class library, supporting targets of:
 
 - .NET 4.5+ (`net45`)
-- .NET Standard 1.1 and 2.0 (`netstandard1.1` and `netstandard2.0`)
+- .NET Standard 2.0 (`netstandard2.0`)
 - .NET 5+ (`net50`)
 
 You should be able to use Protocol Buffers in Visual Studio 2012 and
