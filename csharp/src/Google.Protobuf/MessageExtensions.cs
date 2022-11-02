@@ -31,9 +31,9 @@
 #endregion
 
 using Google.Protobuf.Reflection;
-using System;
 using System.Buffers;
 using System.Collections;
+using System;
 using System.IO;
 using System.Linq;
 using System.Security;
@@ -213,7 +213,7 @@ namespace Google.Protobuf
                         var valueField = f.MessageType.Fields[2];
                         if (valueField.FieldType == FieldType.Message)
                         {
-                            var map = (IDictionary) f.Accessor.GetValue(message);
+                            var map = (IDictionary)f.Accessor.GetValue(message);
                             return map.Values.Cast<IMessage>().All(IsInitialized);
                         }
                         else
@@ -223,14 +223,14 @@ namespace Google.Protobuf
                     }
                     else if (f.IsRepeated && f.FieldType == FieldType.Message || f.FieldType == FieldType.Group)
                     {
-                        var enumerable = (IEnumerable) f.Accessor.GetValue(message);
+                        var enumerable = (IEnumerable)f.Accessor.GetValue(message);
                         return enumerable.Cast<IMessage>().All(IsInitialized);
                     }
                     else if (f.FieldType == FieldType.Message || f.FieldType == FieldType.Group)
                     {
                         if (f.Accessor.HasValue(message))
                         {
-                            return ((IMessage) f.Accessor.GetValue(message)).IsInitialized();
+                            return ((IMessage)f.Accessor.GetValue(message)).IsInitialized();
                         }
                         else
                         {
