@@ -5,29 +5,15 @@ using System.Collections.Generic;
 namespace Google.Protobuf.Reflection.Dynamic
 {
 
-    /*public interface IFieldDescriptorLite : IComparable<IFieldDescriptorLite>
-    {
-        bool IsRepeated { get; }
-        bool IsRequired { get; }
-        bool IsPacked { get; }
-        bool IsExtension { get; }
-        bool MessageSetWireFormat { get; }
-        int FieldNumber { get; }
-        string Name { get; }
-        string FullName { get; }
-        //IEnumLiteMap EnumType { get; }
-        FieldType FieldType { get; }
-        Type MappedType { get; }
-        //MappedType MappedType { get; }
-        object DefaultValue { get; }
-    }*/
-
     internal sealed class FieldSet
     {
 
         private IDictionary<FieldDescriptor, object> fields;
-
-        public static FieldSet CreateInstance()
+        /// <summary>
+        /// Creates a new instance.
+        /// </summary>
+        /// <returns></returns>
+        internal static FieldSet CreateInstance()
         {
             // Use SortedList to keep fields in the canonical order
             return new FieldSet(new SortedList<FieldDescriptor, object>());
@@ -38,57 +24,29 @@ namespace Google.Protobuf.Reflection.Dynamic
             this.fields = fields;
         }
 
-
-
         /// <summary>
-        /// Force coercion to full descriptor dictionary.
+        /// Checks if all the required fields have value.
         /// </summary>
-        internal IDictionary<FieldDescriptor, object> AllFieldDescriptors
-        {
-            get
-            {
-                SortedList<FieldDescriptor, object> copy =
-                    new SortedList<FieldDescriptor, object>();
-                foreach (KeyValuePair<FieldDescriptor, object> fd in fields)
-                {
-                    FieldDescriptor fieldDesc = fd.Key;
-                    copy.Add(fieldDesc, fd.Value);
-                }
-                fields = copy;
-                return fields;
-            }
-        }
-
-
-
-        internal bool IsInitialized
-        {
-            get
-            {
-                foreach (KeyValuePair<FieldDescriptor, object> entry in fields)
-                {
-
-                }
-                return true;
-            }
-        }
-
+        /// <param name="typeFields"></param>
+        /// <returns></returns>
         internal bool IsInitializedWithRespectTo(IEnumerable typeFields)
         {
             foreach (KeyValuePair<string, FieldDescriptor> field in typeFields)
             {
+                // according to proto3, field cant be required.
+                // So result to this method will always be true.
                 if (field.Value.IsRequired && !HasField(field.Value))
                 {
                     return false;
                 }
             }
-            return IsInitialized;
+            return true;
         }
 
         /// <summary>
-        /// See <see cref="IMessageLite.HasField"/>.
+        /// Checks if the fields dictionary contains the field.
         /// </summary>
-        public bool HasField(FieldDescriptor field)
+        private bool HasField(FieldDescriptor field)
         {
             if (field.IsRepeated)
             {
@@ -106,6 +64,7 @@ namespace Google.Protobuf.Reflection.Dynamic
         {
             // First check if we have any repeated values
             bool hasRepeats = false;
+            // TODO to make the fieldSet immutable.
             foreach (object value in fields.Values)
             {
                 IList<object> list = value as IList<object>;
@@ -119,20 +78,42 @@ namespace Google.Protobuf.Reflection.Dynamic
             return this;
         }
 
-        internal int getSerializedSize()
+        /// <summary>
+        /// Returns the serialized size.
+        /// </summary>
+        /// <returns></returns>
+        internal int GetSerializedSize()
         {
             int size = 0;
             foreach (KeyValuePair<FieldDescriptor, object> kvPair in fields)
             {
-                size += computeSize(kvPair.Key, kvPair.Value);
+                size += ComputeSize(kvPair.Key, kvPair.Value);
             }
             return size;
         }
 
-        private int computeSize(FieldDescriptor desc, object value)
+        /// <summary>
+        /// Computes the size of the field. The computation varies if the field is repeated.
+        /// </summary>
+        /// <param name="desc"></param>
+        /// <param name="value"></param>
+        /// <returns></returns>
+        private int ComputeSize(FieldDescriptor desc, object value)
         {
             if (desc.IsRepeated)
             {
+                /*if (desc.IsPacked)
+                {
+                    int dataSize = 0;
+                    foreach (object val in (IEnumerable) value)
+                    {
+                        dataSize += ComputeElementSizeNoTag(desc.FieldType, val);
+                    }
+                    return dataSize + CodedOutputStream.ComputeTagSize(desc.FieldNumber) + CodedOutputStream.ComputeUInt32Size((uint) dataSize);
+
+                }
+                else
+                {*/
                 int dataSize = 0;
                 int tagSize = CodedOutputStream.ComputeTagSize(desc.FieldNumber);
                 foreach (object val in (IEnumerable) value)
@@ -140,6 +121,7 @@ namespace Google.Protobuf.Reflection.Dynamic
                     dataSize += ComputeElementSizeNoTag(desc.FieldType, val) + tagSize;
                 }
                 return dataSize;
+                // }
             }
             else
             {
@@ -148,12 +130,26 @@ namespace Google.Protobuf.Reflection.Dynamic
 
         }
 
+        /// <summary>
+        /// Computes the total size of the filed, along with its tag.
+        /// </summary>
+        /// <param name="fieldType"></param>
+        /// <param name="fieldNumber"></param>
+        /// <param name="value"></param>
+        /// <returns></returns>
         private int ComputeElementSize(FieldType fieldType, int fieldNumber, object value)
         {
             int tagSize = CodedOutputStream.ComputeTagSize(fieldNumber);
             return tagSize + ComputeElementSizeNoTag(fieldType, value);
         }
 
+        /// <summary>
+        /// Computes the size of the field without tag.
+        /// </summary>
+        /// <param name="fieldType"></param>
+        /// <param name="value"></param>
+        /// <returns></returns>
+        /// <exception cref="ArgumentException"></exception>
         private int ComputeElementSizeNoTag(FieldType fieldType, object value)
         {
             switch (fieldType)
@@ -197,8 +193,11 @@ namespace Google.Protobuf.Reflection.Dynamic
             throw new ArgumentException("unidentified type :" + fieldType.ToString());
         }
 
-
-        public void WriteTo(CodedOutputStream output)
+        /// <summary>
+        /// Iterates all the fields and writes them to CodedOutputStream.
+        /// </summary>
+        /// <param name="output"></param>
+        internal void WriteTo(CodedOutputStream output)
         {
             foreach (KeyValuePair<FieldDescriptor, object> kvPair in fields)
             {
@@ -206,29 +205,64 @@ namespace Google.Protobuf.Reflection.Dynamic
             }
         }
 
-        private void WriteField(FieldDescriptor key, object value, CodedOutputStream output)
+        /// <summary>
+        /// Writes the field into output stream, based on isRepeated.
+        /// </summary>
+        /// <param name="descriptor"></param>
+        /// <param name="value"></param>
+        /// <param name="output"></param>
+        private void WriteField(FieldDescriptor descriptor, object value, CodedOutputStream output)
         {
-            FieldType fieldType = key.FieldType;
-            if (key.IsRepeated)
+            FieldType fieldType = descriptor.FieldType;
+            if (descriptor.IsRepeated)
             {
-
+                /*if (descriptor.IsPacked)
+                {
+                    output.WriteTag(descriptor.FieldNumber, WireFormat.WireType.LengthDelimited);
+                    int dataSize = 0;
+                    foreach (Object val in (IEnumerable) value)
+                    {
+                        dataSize += ComputeElementSizeNoTag(fieldType, val);
+                    }
+                    output.WriteUInt32((uint) dataSize);
+                    foreach (Object val in (IEnumerable) value)
+                    {
+                        WriteElementNoTag(output, fieldType, val);
+                    }
+                }
+                else
+                {*/
                 foreach (Object val in (IEnumerable) value)
                 {
-                    WriteElement(output, fieldType, key.FieldNumber, val);
+                    WriteElement(output, fieldType, descriptor.FieldNumber, val);
                 }
+                //}
             }
             else
             {
-                WriteElement(output, fieldType, key.FieldNumber, value);
+                WriteElement(output, fieldType, descriptor.FieldNumber, value);
             }
         }
 
+        /// <summary>
+        /// Writes a single field, first tag and then data.
+        /// </summary>
+        /// <param name="output"></param>
+        /// <param name="type"></param>
+        /// <param name="number"></param>
+        /// <param name="value"></param>
         private void WriteElement(CodedOutputStream output, FieldType type, int number, object value)
         {
             output.WriteTag(number, GetWireFormatForFieldType(type));
             WriteElementNoTag(output, type, value);
         }
 
+        /// <summary>
+        /// Returns the wire format for the field type.
+        /// </summary>
+        /// <param name="type"></param>
+        /// <returns></returns>
+        /// <exception cref="ArgumentException"></exception>
         private WireFormat.WireType GetWireFormatForFieldType(FieldType type)
         {
             switch (type)
@@ -273,6 +307,13 @@ namespace Google.Protobuf.Reflection.Dynamic
             throw new ArgumentException("unidentified type :" + type.ToString());
         }
 
+        /// <summary>
+        /// Write the element value into the output stream.
+        /// </summary>
+        /// <param name="output"></param>
+        /// <param name="type"></param>
+        /// <param name="value"></param>
+        /// <exception cref="ArgumentException"></exception>
         private void WriteElementNoTag(CodedOutputStream output, FieldType type, object value)
         {
             switch (type)
@@ -332,18 +373,34 @@ namespace Google.Protobuf.Reflection.Dynamic
             throw new ArgumentException("unidentified type :" + type.ToString());
         }
 
+        /// <summary>
+        /// Sets the field, if the value is null throw exception.
+        /// </summary>
+        /// <param name="field"></param>
+        /// <param name="value"></param>
+        /// <exception cref="ArgumentNullException"></exception>
         internal void SetField(FieldDescriptor field, object value)
         {
+            if (value == null)
+            {
+                throw new ArgumentNullException(field.Name);
+            }
             fields.Add(field, value);
         }
 
+        /// <summary>
+        /// Creates a list if field not present in the dictionary, and adds the value to the list.
+        /// If field is not repeated throw exception.
+        /// </summary>
+        /// <param name="field"></param>
+        /// <param name="value"></param>
+        /// <exception cref="ArgumentException"></exception>
         internal void AddRepeatedField(FieldDescriptor field, object value)
         {
             if (!field.IsRepeated)
             {
                 throw new ArgumentException("AddRepeatedField can only be called on repeated fields.");
             }
-            // TODO what about the elements already present in the list
             if (!fields.TryGetValue(field, out object list))
             {
                 list = new List<object>();
@@ -353,6 +410,11 @@ namespace Google.Protobuf.Reflection.Dynamic
             ((IList<object>) list).Add(value);
         }
 
+        /// <summary>
+        /// Returns the value of the field represented by FieldDescriptor.
+        /// </summary>
+        /// <param name="fd"></param>
+        /// <returns></returns>
         internal object GetField(FieldDescriptor fd)
         {
             fields.TryGetValue(fd, out object value);

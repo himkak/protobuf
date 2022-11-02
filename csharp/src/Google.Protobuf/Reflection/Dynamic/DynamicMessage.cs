@@ -15,18 +15,33 @@ namespace Google.Protobuf.Reflection.Dynamic
         private readonly UnknownFieldSet unknownFields;
         private int memoizedSize = -1;
 
+        /// <summary>
+        /// Descriptor for this message.
+        /// </summary>
         public MessageDescriptor Descriptor => type;
 
+        /// <summary>
+        /// Default implementation of Overridden method.
+        /// </summary>
+        /// <param name="input"></param>
+        /// <exception cref="NotImplementedException"></exception>
         public void MergeFrom(CodedInputStream input)
         {
-            MergeFrom(input);
+            throw new NotImplementedException();
         }
-
+        /// <summary>
+        /// Writes the message to CodedOutputStream.
+        /// </summary>
+        /// <param name="output"></param>
         public void WriteTo(CodedOutputStream output)
         {
             fields.WriteTo(output);
         }
 
+        /// <summary>
+        /// Used to calculate the size of the serialized message.
+        /// </summary>
+        /// <returns></returns>
         public int CalculateSize()
         {
             int size = memoizedSize;
@@ -34,11 +49,17 @@ namespace Google.Protobuf.Reflection.Dynamic
             {
                 return size;
             }
-            size = fields.getSerializedSize();
+            size = fields.GetSerializedSize();
             memoizedSize = size;
             return size;
         }
 
+        /// <summary>
+        /// Parse data as a message of the given type and return it.
+        /// </summary>
+        /// <param name="type"></param>
+        /// <param name="data"></param>
+        /// <returns></returns>
         public static DynamicMessage ParseFrom(MessageDescriptor type, ByteString data)
         {
             Builder builder = NewBuilder(type);
@@ -46,11 +67,21 @@ namespace Google.Protobuf.Reflection.Dynamic
             return builder.BuildParsed();
         }
 
+        /// <summary>
+        /// Construct a IMessage.Builder for the given type.
+        /// </summary>
+        /// <param name="type"></param>
+        /// <returns></returns>
         public static Builder NewBuilder(MessageDescriptor type)
         {
             return new Builder(type);
         }
 
+        /// <summary>
+        /// Returns the value of the field, represented by field descriptor
+        /// </summary>
+        /// <param name="fd"></param>
+        /// <returns></returns>
         public object GetField(FieldDescriptor fd)
         {
             return fields.GetField(fd);
@@ -81,13 +112,18 @@ namespace Google.Protobuf.Reflection.Dynamic
                 this.UnknownFields = new UnknownFieldSet();
             }
 
-            public bool IsInitialized
+            private bool IsInitialized
             {
                 get { return fields.IsInitializedWithRespectTo(type.Fields.ByJsonName()); }
             }
 
             MessageDescriptor IMessage.Descriptor => throw new NotImplementedException();
 
+            /// <summary>
+            /// Creates the DynamicMessage
+            /// </summary>
+            /// <returns></returns>
+            /// <exception cref="Exception"></exception>
             public DynamicMessage Build()
             {
                 if (fields != null && !IsInitialized)
@@ -95,6 +131,26 @@ namespace Google.Protobuf.Reflection.Dynamic
                     throw new Exception(String.Format("Message {0} is missing required fields", new DynamicMessage(type, fields, UnknownFields).GetType()));
                 }
                 return BuildPartial();
+            }
+
+            /// <summary>
+            /// Used to set a field
+            /// </summary>
+            /// <param name="fd"></param>
+            /// <param name="value"></param>
+            public void SetField(FieldDescriptor fd, object value)
+            {
+                fields.SetField(fd, value);
+            }
+
+            /// <summary>
+            /// Used to add repeated field
+            /// </summary>
+            /// <param name="fd"></param>
+            /// <param name="v"></param>
+            public void AddRepeatedField(FieldDescriptor fd, object v)
+            {
+                fields.AddRepeatedField(fd, v);
             }
 
             private DynamicMessage BuildPartial()
@@ -110,9 +166,15 @@ namespace Google.Protobuf.Reflection.Dynamic
                 return result;
             }
 
+            /// <summary>
+            /// Reads every field and sets it in the FieldSet instance
+            /// </summary>
+            /// <param name="input"></param>
+            /// <exception cref="Exception"></exception>
             public void MergeFrom(CodedInputStream input)
             {
                 uint tag;
+                Console.WriteLine("Inside mergeFrom");
                 while ((tag = input.ReadTag()) != 0)
                 {
                     int fieldNumber = WireFormat.GetTagFieldNumber(tag);
@@ -122,15 +184,26 @@ namespace Google.Protobuf.Reflection.Dynamic
                     {
                         throw new Exception("Field descriptor not found for fieldNumber:" + fieldNumber);
                     }
+                    Console.WriteLine("fieldName:" + fd.Name);
                     if (fd.FieldType == FieldType.Message)
                     {
                         Builder value = NewBuilder(fd.MessageType);
-                        input.ReadMessage(value);
-                        DynamicMessage res = value.Build();
+
+
                         if (fd.ToProto().Label != FieldDescriptorProto.Types.Label.Repeated)
+                        {
+                            input.ReadMessage(value);
+                            DynamicMessage res = value.Build();
                             fields.SetField(fd, res);
+                        }
                         else
+                        {
+                            /*if (fd.IsPacked)
+                                input.ReadUInt32();*/
+                            input.ReadMessage(value);
+                            DynamicMessage res = value.Build();
                             fields.AddRepeatedField(fd, res);
+                        }
                     }
                     else
                     {
@@ -142,6 +215,8 @@ namespace Google.Protobuf.Reflection.Dynamic
                         }
                         else if (fd.ToProto().Label == FieldDescriptorProto.Types.Label.Repeated)
                         {
+                            /*if (fd.IsPacked)
+                                input.ReadUInt32();*/
                             IEnumerator enumerator = GetFieldCodec(tag, fd.FieldType, input);
                             while (enumerator.MoveNext())
                             {
@@ -153,28 +228,32 @@ namespace Google.Protobuf.Reflection.Dynamic
                             UnknownFields = UnknownFieldSet.MergeFieldFrom(UnknownFields, input);
                         }
                     }
-
                 }
             }
 
+            /// <summary>
+            /// Used for repeated fields to get enumerator.
+            /// Based on the fieldType, creates Repeated field, adds entries from CodedInputStrem to repeatedField and returns enumerator on the repeated field.
+            /// </summary>
+            /// <param name="tag"></param>
+            /// <param name="fieldType"></param>
+            /// <param name="input"></param>
+            /// <returns></returns>
             private static IEnumerator GetFieldCodec(uint tag, FieldType fieldType, CodedInputStream input)
             {
                 switch (fieldType)
                 {
                     case FieldType.Int32:
-                        var fc = FieldCodec.ForInt32(tag);
                         RepeatedField<int> rf = new RepeatedField<int>();
-                        rf.AddEntriesFrom(input, fc);
+                        rf.AddEntriesFrom(input, FieldCodec.ForInt32(tag));
                         return rf.GetEnumerator();
                     case FieldType.Int64:
-                        var fc1 = FieldCodec.ForInt64(tag);
                         RepeatedField<long> rf1 = new RepeatedField<long>();
-                        rf1.AddEntriesFrom(input, fc1);
+                        rf1.AddEntriesFrom(input, FieldCodec.ForInt64(tag));
                         return rf1.GetEnumerator();
                     case FieldType.Bool:
-                        FieldCodec<bool> fcBool = FieldCodec.ForBool(tag);
                         RepeatedField<bool> rfBool = new RepeatedField<bool>();
-                        rfBool.AddEntriesFrom(input, fcBool);
+                        rfBool.AddEntriesFrom(input, FieldCodec.ForBool(tag));
                         return rfBool.GetEnumerator();
                     case FieldType.UInt32:
                         RepeatedField<uint> rfUint = new RepeatedField<uint>();
@@ -224,15 +303,16 @@ namespace Google.Protobuf.Reflection.Dynamic
                         RepeatedField<ByteString> rfBytes = new RepeatedField<ByteString>();
                         rfBytes.AddEntriesFrom(input, FieldCodec.ForBytes(tag));
                         return rfBytes.GetEnumerator();
-                        /*case FieldType.Enum:
-                            RepeatedField<Enum> rfEnum = new RepeatedField<Enum>();
-                            rfEnum.AddEntriesFrom(input, FieldCodec.ForEnum(tag));
-                            return rfEnum.GetEnumerator();*/
-
                 }
-                return null;
+                throw new Exception("FieldType:" + fieldType + ", not handled in GetFieldCodec method.");
             }
 
+            /// <summary>
+            /// Reads the field from the CodedInputStream, based on the fieldType and returns it.
+            /// </summary>
+            /// <param name="fieldType"></param>
+            /// <param name="input"></param>
+            /// <returns></returns>
             private object ReadField(FieldType fieldType, CodedInputStream input)
             {
                 switch (fieldType)
@@ -269,28 +349,39 @@ namespace Google.Protobuf.Reflection.Dynamic
                         return input.ReadSInt64();
                     case FieldType.Enum:
                         return input.ReadEnum();
-                        /*case FieldType.Message:
-                            return input.ReadMessage();*/
-
                 }
-                return null;
+                throw new Exception("FieldType:" + fieldType + ", not handled while reading field.");
             }
 
-            void IMessage.WriteTo(CodedOutputStream output)
-            {
-                throw new NotImplementedException();
-            }
-
-            int IMessage.CalculateSize()
-            {
-                throw new NotImplementedException();
-            }
-
+            /// <summary>
+            /// Marks the fields as immutable and returns a newly created DynsmicMessage.
+            /// </summary>
+            /// <returns></returns>
             internal DynamicMessage BuildParsed()
             {
                 fields.MakeImmutable();
                 DynamicMessage result = new DynamicMessage(type, fields, UnknownFields);
                 return result;
+            }
+
+            /// <summary>
+            /// Default implementation of Overridden method.
+            /// </summary>
+            /// <param name="output"></param>
+            /// <exception cref="NotImplementedException"></exception>
+            void IMessage.WriteTo(CodedOutputStream output)
+            {
+                throw new NotImplementedException();
+            }
+
+            /// <summary>
+            /// Default implementation of Overridden method.
+            /// </summary>
+            /// <returns></returns>
+            /// <exception cref="NotImplementedException"></exception>
+            int IMessage.CalculateSize()
+            {
+                throw new NotImplementedException();
             }
 
         }
