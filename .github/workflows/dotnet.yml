@@ -3,11 +3,7 @@
 
 name: .NET
 
-on:
-  push:
-    branches: [ "protobuf-dynamicTyping" ]
-  pull_request:
-    branches: [ "main" ]
+on: [push]
 
 jobs:
   build:
@@ -15,7 +11,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        dotnet-version: ['1.1.x', '2.0.x', '4.5.x', '5.0.x' ]
+        dotnet-version: ['2.0.x', '4.5.x', '5.0.x']
 
     steps:
     - uses: actions/checkout@v3
