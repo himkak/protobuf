@@ -9,11 +9,17 @@ namespace Google.Protobuf.Reflection.Dynamic
     /// An implementation of IMessage that can represent arbitrary types, given a MessageaDescriptor.
     /// Unknown fields not supported.
     /// </summary>
-    public sealed partial class DynamicMessage : IMessage
+    public sealed class DynamicMessage : IMessage
     {
         private readonly MessageDescriptor type;
         private readonly FieldSet fields;
         private int memoizedSize = -1;
+
+        private DynamicMessage(MessageDescriptor type, FieldSet fields)
+        {
+            this.type = type;
+            this.fields = fields;
+        }
 
         /// <summary>
         /// Descriptor for this message.
@@ -22,13 +28,16 @@ namespace Google.Protobuf.Reflection.Dynamic
 
         /// <summary>
         /// Default implementation of Overridden method.
+        /// This specific implementation is never used, mergeFrom is used from the builder class.
+        /// MergeFrom functionality comes into picture when, we do desrialization from ByteString using static ParseFrom method.
         /// </summary>
         /// <param name="input"></param>
         /// <exception cref="NotImplementedException"></exception>
-        public void MergeFrom(CodedInputStream input)
+        void IMessage.MergeFrom(CodedInputStream input)
         {
             throw new NotImplementedException();
         }
+
         /// <summary>
         /// Writes the message to CodedOutputStream.
         /// </summary>
@@ -87,17 +96,10 @@ namespace Google.Protobuf.Reflection.Dynamic
             return fields.GetField(fd);
         }
 
-        private DynamicMessage(MessageDescriptor type, FieldSet fields)
-        {
-            this.type = type;
-            this.fields = fields;
-        }
-
-
         /// <summary>
         /// Builder for dynamic messages. Instances are created with DynamicMessage.CreateBuilder..
         /// </summary>
-        public sealed partial class Builder : IMessage
+        public sealed class Builder : IMessage
         {
 
             private readonly MessageDescriptor type;
@@ -125,7 +127,7 @@ namespace Google.Protobuf.Reflection.Dynamic
             {
                 if (fields != null && !IsInitialized)
                 {
-                    throw new Exception(String.Format("Message {0} is missing required fields", new DynamicMessage(type, fields).GetType()));
+                    throw new Exception($"Message of type {typeof(DynamicMessage)} is missing required fields");
                 }
                 return BuildPartial();
             }
@@ -176,7 +178,7 @@ namespace Google.Protobuf.Reflection.Dynamic
 
                     if (fd == null)
                     {
-                        throw new Exception("Field descriptor not found for fieldNumber:" + fieldNumber);
+                        throw new Exception($"Field descriptor not found for fieldNumber: {fieldNumber}");
                     }
                     if (fd.FieldType == FieldType.Message)
                     {
@@ -352,6 +354,8 @@ namespace Google.Protobuf.Reflection.Dynamic
 
             /// <summary>
             /// Default implementation of Overridden method.
+            /// This implementation is never used, writeTo is used from DynamicMessage class.
+            /// WriteTo functionality is used when we do serialization of DynamicMessage to generate ByteString.
             /// </summary>
             /// <param name="output"></param>
             /// <exception cref="NotImplementedException"></exception>
@@ -362,6 +366,8 @@ namespace Google.Protobuf.Reflection.Dynamic
 
             /// <summary>
             /// Default implementation of Overridden method.
+            /// This implementation is never used, CalculateSize is used from DynamicMessage class.
+            /// CalculateSize functionality is used when we do serialization of DynamicMessage to generate ByteString.
             /// </summary>
             /// <returns></returns>
             /// <exception cref="NotImplementedException"></exception>

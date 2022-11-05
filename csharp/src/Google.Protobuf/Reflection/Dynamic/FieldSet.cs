@@ -9,14 +9,14 @@ namespace Google.Protobuf.Reflection.Dynamic
     {
 
         private IDictionary<FieldDescriptor, object> fields;
+
         /// <summary>
         /// Creates a new instance.
         /// </summary>
         /// <returns></returns>
         internal static FieldSet CreateInstance()
         {
-            // Use SortedList to keep fields in the canonical order
-            return new FieldSet(new SortedList<FieldDescriptor, object>());
+            return new FieldSet(new Dictionary<FieldDescriptor, object>());
         }
 
         private FieldSet(IDictionary<FieldDescriptor, object> fields)
@@ -122,33 +122,33 @@ namespace Google.Protobuf.Reflection.Dynamic
                 case FieldType.String:
                     return CodedOutputStream.ComputeStringSize(value.ToString());
                 case FieldType.Bool:
-                    return CodedOutputStream.ComputeBoolSize(bool.Parse(value.ToString()));
+                    return CodedOutputStream.ComputeBoolSize((bool) value);
                 case FieldType.Int32:
-                    return CodedOutputStream.ComputeInt32Size(int.Parse(value.ToString()));
+                    return CodedOutputStream.ComputeInt32Size((int) value);
                 case FieldType.Int64:
-                    return CodedOutputStream.ComputeInt64Size(long.Parse(value.ToString()));
+                    return CodedOutputStream.ComputeInt64Size((long) value);
                 case FieldType.Double:
-                    return CodedOutputStream.ComputeDoubleSize(double.Parse(value.ToString()));
+                    return CodedOutputStream.ComputeDoubleSize((double) value);
                 case FieldType.Float:
-                    return CodedOutputStream.ComputeFloatSize(float.Parse(value.ToString()));
+                    return CodedOutputStream.ComputeFloatSize((float) value);
                 case FieldType.Bytes:
                     return CodedOutputStream.ComputeBytesSize((ByteString) value);
                 case FieldType.UInt32:
-                    return CodedOutputStream.ComputeUInt32Size(uint.Parse(value.ToString()));
+                    return CodedOutputStream.ComputeUInt32Size((uint) value);
                 case FieldType.UInt64:
-                    return CodedOutputStream.ComputeUInt64Size(ulong.Parse(value.ToString()));
+                    return CodedOutputStream.ComputeUInt64Size((ulong) value);
                 case FieldType.SInt32:
-                    return CodedOutputStream.ComputeSInt32Size(int.Parse(value.ToString()));
+                    return CodedOutputStream.ComputeSInt32Size((int) value);
                 case FieldType.SInt64:
-                    return CodedOutputStream.ComputeSInt64Size(long.Parse(value.ToString()));
+                    return CodedOutputStream.ComputeSInt64Size((long) value);
                 case FieldType.Fixed32:
-                    return CodedOutputStream.ComputeFixed32Size(uint.Parse(value.ToString()));
+                    return CodedOutputStream.ComputeFixed32Size((uint) value);
                 case FieldType.Fixed64:
-                    return CodedOutputStream.ComputeFixed64Size(ulong.Parse(value.ToString()));
+                    return CodedOutputStream.ComputeFixed64Size((ulong) value);
                 case FieldType.SFixed32:
-                    return CodedOutputStream.ComputeSFixed32Size(int.Parse(value.ToString()));
+                    return CodedOutputStream.ComputeSFixed32Size((int) value);
                 case FieldType.SFixed64:
-                    return CodedOutputStream.ComputeSFixed64Size(long.Parse(value.ToString()));
+                    return CodedOutputStream.ComputeSFixed64Size((long) value);
                 case FieldType.Message:
                     return CodedOutputStream.ComputeMessageSize((IMessage) value);
                 case FieldType.Enum:
@@ -270,7 +270,7 @@ namespace Google.Protobuf.Reflection.Dynamic
                     output.WriteString(value.ToString());
                     return;
                 case FieldType.Bool:
-                    output.WriteBool(Boolean.Parse(value.ToString()));
+                    output.WriteBool((bool) value);
                     return;
                 case FieldType.Int32:
                     output.WriteInt32((int) value);
