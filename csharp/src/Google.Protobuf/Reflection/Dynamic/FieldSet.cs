@@ -33,7 +33,7 @@ namespace Google.Protobuf.Reflection.Dynamic
         {
             foreach (KeyValuePair<string, FieldDescriptor> field in typeFields)
             {
-                // according to proto3, field cant be required.
+                // according to proto3, field can't be required.
                 // So result to this method will always be true.
                 if (field.Value.IsRequired && !HasField(field.Value))
                 {
