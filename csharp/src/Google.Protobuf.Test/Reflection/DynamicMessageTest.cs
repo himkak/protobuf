@@ -113,11 +113,7 @@ namespace Google.Protobuf.Reflection
                 RepeatedFixed64 = { UInt64.MaxValue, 1234567890123 },
                 RepeatedFloat = { 100f, 12.25f },
                 RepeatedUint32 = { UInt32.MaxValue, UInt32.MinValue },
-                RepeatedUint64 = { UInt64.MaxValue, UInt64.MinValue },
-
-                //RepeatedForeignEnum = { ForeignEnum.ForeignFoo, ForeignEnum.ForeignBar },
-                //RepeatedImportEnum = { ImportEnum.ImportBaz, ImportEnum.Unspecified },
-                //RepeatedNestedEnum = { TestProtos.TestAllTypes.Types.NestedEnum.Foo, TestProtos.TestAllTypes.Types.NestedEnum.Neg },
+                RepeatedUint64 = { UInt64.MaxValue, UInt64.MinValue }
             };
         }
 
