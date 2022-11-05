@@ -15,7 +15,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        dotnet-version: ['1.1', '2.0', '4.5', '5.0' ]
+        dotnet-version: ['1.1.x', '2.0.x', '4.5.x', '5.0.x' ]
 
     steps:
     - uses: actions/checkout@v3
@@ -23,6 +23,8 @@ jobs:
       uses: actions/setup-dotnet@v3
       with:
         dotnet-version: ${{ matrix.dotnet-version }}
+    - name: Display dotnet version
+      run: dotnet --version
     - name: Restore dependencies
       run: cd ${{ github.workspace }} && dotnet restore ./csharp/src/Google.Protobuf.sln
     - name: Build
