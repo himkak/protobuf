@@ -21,8 +21,8 @@ jobs:
       with:
         dotnet-version: 6.0.x
     - name: Restore dependencies
-      run: dotnet restore ..\..\csharp\src\Google.Protobuf.sln
+      run: cd ${{ github.workspace }} && dotnet restore ./csharp/src/Google.Protobuf.sln
     - name: Build
-      run: dotnet build ..\..\csharp\src\Google.Protobuf.sln --no-restore
+      run: cd ${{ github.workspace }} && dotnet build ./csharp/src/Google.Protobuf.sln --no-restore
     - name: Test
-      run: dotnet test ..\..\csharp\src\Google.Protobuf.sln --no-build --verbosity normal
+      run: cd ${{ github.workspace }} && dotnet test ./csharp/src/Google.Protobuf.sln --no-build --verbosity normal
