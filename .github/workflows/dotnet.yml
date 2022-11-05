@@ -21,7 +21,7 @@ jobs:
       with:
         dotnet-version: 6.0.x
     - name: Restore dependencies
-      run: dotnet restore
+      run: dotnet restore ..\..\csharp\src\Google.Protobuf.sln
     - name: Build
       run: dotnet build ..\..\csharp\src\Google.Protobuf.sln --no-restore
     - name: Test
