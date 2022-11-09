@@ -215,9 +215,13 @@ namespace Google.Protobuf.Reflection.Dynamic
                 input.ReadMessage(value);
                 DynamicMessage val = value.Build();
                 if (fd.ToProto().Label != FieldDescriptorProto.Types.Label.Repeated)
+                {
                     fields.SetField(fd, val);
+                }
                 else
+                {
                     fields.AddRepeatedField(fd, val);
+                }
             }
 
             /// <summary>
