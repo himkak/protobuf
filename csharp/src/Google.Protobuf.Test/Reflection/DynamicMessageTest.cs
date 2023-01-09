@@ -1,14 +1,44 @@
-﻿using Google.Protobuf.Reflection.Dynamic;
-using Google.Protobuf.TestProtos;
-using Google.Protobuf.WellKnownTypes;
+﻿using Google.Protobuf.TestProtos;
 using NUnit.Framework;
 using System;
 using System.Collections.Generic;
+using System.IO;
+using System.Linq;
 
 namespace Google.Protobuf.Reflection
 {
     public class DynamicMessageTest
     {
+
+
+
+        [Test]
+        public void TestDynamicMessageUsage()
+        {
+            string fileName = "testFile.txt";
+            MessageDescriptor desc = TestAllTypes.Descriptor;
+
+            //create 
+            DynamicMessage dm = new DynamicMessage(desc);
+            dm.Add("single_string", "sss");
+
+            //serialize
+            //Stream output = WriteTo(dm);
+            using (var output = File.Create(fileName))
+            {
+                dm.WriteTo(output);
+            }
+
+            //deserialize
+            DynamicMessage deserializedDm;
+            DynamicMessage tempdm = new DynamicMessage(desc);
+            using (var input = File.OpenRead(fileName))
+            {
+                deserializedDm = (DynamicMessage) tempdm.Parser.ParseFrom(input);
+            }
+
+        }
+
 
         [Test]
         public void TestDynamicMessageParsingSingleString()
@@ -22,9 +52,16 @@ namespace Google.Protobuf.Reflection
             ByteString byteStr = msg.ToByteString();
             MessageDescriptor desc = TestAllTypes.Descriptor;
             FieldDescriptor fd = desc.FindFieldByName("single_string");
-            DynamicMessage res = DynamicMessage.ParseFrom(desc, byteStr);
+            DynamicMessage res = ParseFrom(desc, byteStr);
             Assert.NotNull(res);
-            Assert.AreEqual(val, res.GetField(fd));
+            Assert.AreEqual(val, res.FieldSet.GetField(fd));
+        }
+
+        public DynamicMessage ParseFrom(MessageDescriptor type, ByteString data)
+        {
+            DynamicMessage dynMsg = new DynamicMessage(type);
+            dynMsg = (DynamicMessage) dynMsg.Parser.ParseFrom(data);
+            return dynMsg;
         }
 
         [Test]
@@ -33,28 +70,35 @@ namespace Google.Protobuf.Reflection
             TestAllTypes message = GetAllTypesMessage();
             MessageDescriptor desc = TestAllTypes.Descriptor;
             ByteString byteStr = message.ToByteString();
-            DynamicMessage res = DynamicMessage.ParseFrom(desc, byteStr);
+            DynamicMessage res = ParseFrom(desc, byteStr);
             Assertions(desc, res);
         }
 
         [Test]
         public void TestDynamicMessageWriteTo()
         {
-            TestAllTypes message = GetAllTypesMessage();
             MessageDescriptor desc = TestAllTypes.Descriptor;
-            ByteString byteStr = message.ToByteString();
-            DynamicMessage dm = DynamicMessage.ParseFrom(desc, byteStr);
-            ByteString dmByteString = Any.Pack(dm).Value;
-            DynamicMessage objectUnderTest = DynamicMessage.ParseFrom(desc, dmByteString);
-            Assertions(desc, objectUnderTest);
+            DynamicMessage dm = new DynamicMessage(desc);
+            string fieldName = "single_string";
+            string fieldValue = "sss";
+            dm.Add(fieldName, fieldValue);
+
+            Stream stream = WriteTo(dm);
+
+            var input = new CodedInputStream(stream);
+            int fieldNumber = WireFormat.GetTagFieldNumber(input.ReadTag());
+            Assert.AreEqual(desc.FindFieldByNumber(fieldNumber).Name, fieldName);
+            Assert.AreEqual(fieldValue, input.ReadString());
         }
+
+
 
         [Test]
         public void TestDynamicMessageSetterRejectsNull()
         {
             MessageDescriptor desc = TestAllTypes.Descriptor;
-            DynamicMessage.Builder builder = DynamicMessage.NewBuilder(desc);
-            var exc = Assert.Throws<ArgumentNullException>(() => builder.SetField(desc.FindFieldByName("single_string"), null));
+            DynamicMessage dm = new DynamicMessage(desc);
+            var exc = Assert.Throws<ArgumentNullException>(() => dm.FieldSet.SetField(desc.FindFieldByName("single_string"), null));
             Assert.That(exc.ParamName, Is.EqualTo("single_string"));
         }
 
@@ -64,11 +108,78 @@ namespace Google.Protobuf.Reflection
             var message = GetAllTypesMessage();
             MessageDescriptor desc = TestAllTypes.Descriptor;
             ByteString byteStr = message.ToByteString();
-            DynamicMessage dm = DynamicMessage.ParseFrom(desc, byteStr);
+            DynamicMessage dm = ParseFrom(desc, byteStr);
             Assert.AreEqual(1386, dm.CalculateSize());
         }
 
-        private TestAllTypes GetAllTypesMessage()
+
+        [Test]
+        public void TestUnknownField()
+        {
+
+            TestAllTypes testAllTypes = new TestAllTypes
+            {
+                SingleString = "test"
+            };
+
+            var fdProto = new FieldDescriptorProto()
+            {
+                Name = "single_string2",
+                Type = FieldDescriptorProto.Types.Type.String,
+                Number = 1,
+                Label = FieldDescriptorProto.Types.Label.Optional
+
+            };
+            List<FieldDescriptorProto> fields = new List<FieldDescriptorProto>();
+            fields.Add(fdProto);
+            MessageDescriptor desc = GetMessageDescriptor("Test", fields);
+
+            DynamicMessage dm = (DynamicMessage) new DynamicMessage(desc).Parser.ParseFrom(testAllTypes.ToByteArray());
+
+            Stream stream = WriteTo(dm);
+
+            var input = new CodedInputStream(stream);
+            uint tag = input.ReadTag();
+            int fieldNumber = WireFormat.GetTagFieldNumber(tag);
+            Assert.AreEqual(fieldNumber, 14);
+            Assert.AreEqual("test", input.ReadString());
+        }
+
+
+        private static MessageDescriptor GetMessageDescriptor(string baseFieldName, List<FieldDescriptorProto> fields)
+        {
+            var fileDescProto = new FileDescriptorProto();
+            fileDescProto.Name = baseFieldName;
+            var descP = new DescriptorProto();
+            descP.Name = baseFieldName;
+            foreach (FieldDescriptorProto fdProto in fields)
+            {
+                descP.Field.Add(fdProto);
+            }
+            fileDescProto.MessageType.Add(descP);
+            return ConvertToDescriptor(fileDescProto, baseFieldName);
+        }
+        private static MessageDescriptor ConvertToDescriptor(FileDescriptorProto fileDescProto, string baseFieldName)
+        {
+            var fileDescSet = new FileDescriptorSet();
+            fileDescSet.File.Add(fileDescProto);
+            var byteStrings = fileDescSet.File.Select(f => f.ToByteString()).ToList();
+            IReadOnlyList<FileDescriptor> descriptors = FileDescriptor.BuildFromByteStrings(byteStrings);
+            //In the descriptors only 1 element is added.
+            return descriptors.First().FindTypeByName<MessageDescriptor>(baseFieldName);
+        }
+
+        private static Stream WriteTo(DynamicMessage dm)
+        {
+            var stream = new MemoryStream();
+            var output = new CodedOutputStream(stream);
+            dm.WriteTo(output);
+            output.Flush();
+            stream.Position = 0;// TODO check if reqd
+            return stream;
+        }
+
+        private static TestAllTypes GetAllTypesMessage()
         {
             return new TestAllTypes
             {
@@ -117,7 +228,7 @@ namespace Google.Protobuf.Reflection
             };
         }
 
-        private void Assertions(MessageDescriptor desc, DynamicMessage res)
+        private static void Assertions(MessageDescriptor desc, DynamicMessage res)
         {
             Assert.NotNull(res);
             Assert.AreEqual("test", GetField(desc, res, "single_string"));
@@ -152,11 +263,11 @@ namespace Google.Protobuf.Reflection
             Assert.AreEqual(UInt64.MinValue, GetField(desc, res, "repeated_uint64[1]"));
         }
 
-        private object GetField(MessageDescriptor desc, DynamicMessage dm, String fieldFullName)
+        private static object GetField(MessageDescriptor desc, DynamicMessage dm, String fieldFullName)
         {
             if (!fieldFullName.Contains(".") && !fieldFullName.Contains("["))
             {
-                return dm.GetField(desc.FindFieldByName(fieldFullName));
+                return dm.FieldSet.GetField(desc.FindFieldByName(fieldFullName));
             }
             else if (fieldFullName.Contains("[") && !fieldFullName.Contains("."))
             {

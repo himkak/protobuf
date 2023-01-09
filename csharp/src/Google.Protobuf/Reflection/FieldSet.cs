@@ -2,13 +2,17 @@
 using System.Collections;
 using System.Collections.Generic;
 
-namespace Google.Protobuf.Reflection.Dynamic
+namespace Google.Protobuf.Reflection
 {
-
-    internal sealed class FieldSet
+    /// <summary>
+    /// Class used to hold collection of FieldDescriptor and value mapping.
+    /// </summary>
+    public sealed class FieldSet : IEquatable<FieldSet>, IDeepCloneable<FieldSet>
     {
 
-        private IDictionary<FieldDescriptor, object> fields;
+        private readonly IDictionary<FieldDescriptor, object> fields;
+
+        private IDictionary<FieldDescriptor, object> Fields => fields;
 
         /// <summary>
         /// Creates a new instance.
@@ -22,38 +26,6 @@ namespace Google.Protobuf.Reflection.Dynamic
         private FieldSet(IDictionary<FieldDescriptor, object> fields)
         {
             this.fields = fields;
-        }
-
-        /// <summary>
-        /// Checks if all the required fields have value.
-        /// </summary>
-        /// <param name="typeFields"></param>
-        /// <returns></returns>
-        internal bool IsInitializedWithRespectTo(IEnumerable typeFields)
-        {
-            foreach (KeyValuePair<string, FieldDescriptor> field in typeFields)
-            {
-                // according to proto3, field can't be required.
-                // So result to this method will always be true.
-                if (field.Value.IsRequired && !HasField(field.Value))
-                {
-                    return false;
-                }
-            }
-            return true;
-        }
-
-        /// <summary>
-        /// Checks if the fields dictionary contains the field.
-        /// </summary>
-        private bool HasField(FieldDescriptor field)
-        {
-            if (field.IsRepeated)
-            {
-                throw new ArgumentException("HasField() can only be called on non-repeated fields.");
-            }
-
-            return fields.ContainsKey(field);
         }
 
         /// <summary>
@@ -155,7 +127,7 @@ namespace Google.Protobuf.Reflection.Dynamic
                     return CodedOutputStream.ComputeEnumSize((int) value);
 
             }
-            throw new ArgumentException("unidentified type :" + fieldType.ToString());
+            throw new ArgumentException($"unidentified type :{fieldType}");
         }
 
         /// <summary>
@@ -181,7 +153,7 @@ namespace Google.Protobuf.Reflection.Dynamic
             FieldType fieldType = descriptor.FieldType;
             if (descriptor.IsRepeated)
             {
-                foreach (Object val in (IEnumerable) value)
+                foreach (object val in (IEnumerable) value)
                 {
                     WriteElement(output, fieldType, descriptor.FieldNumber, val);
                 }
@@ -252,7 +224,7 @@ namespace Google.Protobuf.Reflection.Dynamic
                 case FieldType.Group:
                     return WireFormat.WireType.StartGroup;
             }
-            throw new ArgumentException("unidentified type :" + type.ToString());
+            throw new ArgumentException($"unidentified fieldtype :{type}");
         }
 
         /// <summary>
@@ -267,7 +239,7 @@ namespace Google.Protobuf.Reflection.Dynamic
             switch (type)
             {
                 case FieldType.String:
-                    output.WriteString(value.ToString());
+                    output.WriteString((string) value);
                     return;
                 case FieldType.Bool:
                     output.WriteBool((bool) value);
@@ -318,7 +290,7 @@ namespace Google.Protobuf.Reflection.Dynamic
                     output.WriteMessage((IMessage) value);
                     return;
             }
-            throw new ArgumentException("unidentified type :" + type.ToString());
+            throw new ArgumentException($"unidentified type :{type}");
         }
 
         /// <summary>
@@ -363,12 +335,56 @@ namespace Google.Protobuf.Reflection.Dynamic
         /// </summary>
         /// <param name="fd"></param>
         /// <returns></returns>
-        internal object GetField(FieldDescriptor fd)
+        public object GetField(FieldDescriptor fd)
         {
             fields.TryGetValue(fd, out object value);
             return value;
         }
 
+        internal void Merge(FieldSet fieldSet)
+        {
+            foreach (KeyValuePair<FieldDescriptor, object> kv in fieldSet.Fields)
+            {
+                FieldDescriptor fd = kv.Key;
+                object val = kv.Value;
+                if (fd.IsRepeated)
+                {
+                    AddRepeatedField(fd, val);
+                }
+                else
+                {
+                    SetField(fd, val);
+                }
+            }
+        }
+
+        /// <summary>
+        /// Compare for equality
+        /// </summary>
+        /// <param name="other"></param>
+        /// <returns></returns>
+        public bool Equals(FieldSet other)
+        {
+            if (ReferenceEquals(other, null))
+            {
+                return false;
+            }
+            if (ReferenceEquals(other, this))
+            {
+                return true;
+            }
+            if (!fields.Equals(other.fields)) return false;
+            return true;
+        }
+
+        /// <summary>
+        /// To clone the FieldSet
+        /// </summary>
+        /// <returns></returns>
+        public FieldSet Clone()
+        {
+            return new FieldSet(new Dictionary<FieldDescriptor, object>(fields));
+        }
     }
 
 }
